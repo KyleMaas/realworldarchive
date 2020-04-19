@@ -1,0 +1,14 @@
+{
+    // For more on how this works, see https://users.rust-lang.org/t/visual-studio-code-launch-json-debug-configuration-build-rust-with-cargo/29619/2
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "cargo build",
+            "type": "cargo",
+            "subcommand": "build",
+            "problemMatcher": [
+                "$rustc"
+            ]
+        }
+    ]
+}
