@@ -1,10 +1,15 @@
 extern crate clap;
 use clap::{Arg, App};
+extern crate image;
+extern crate rqrr;
 
 mod stress_test_page;
 mod archive_human_output_file;
+mod archive_human_input_file;
+mod grayscale_recognizer;
 use stress_test_page::StressTestPage;
 use archive_human_output_file::{OutputFormat, ArchiveHumanOutputFile};
+use archive_human_input_file::ArchiveHumanInputFile;
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {
@@ -30,14 +35,14 @@ fn main() {
                         .long("input")
                         .help("File or directory to read input from.  Required unless running a stress test in encode mode.")
                         .takes_value(true)
-                        .required_unless("stresstest")
+                        .required_unless_all(&["stresstest", "encode"])
                         .display_order(1))
                     .arg(Arg::with_name("output")
                         .short("o")
                         .long("output")
                         .help("File or directory to place output in.  Required unless running a stress test in decode mode.")
                         .takes_value(true)
-                        .required(true)
+                        .required_unless_all(&["stresstest", "decode"])
                         .display_order(2))
                     .arg(Arg::with_name("format")
                         .short("f")
@@ -120,9 +125,9 @@ fn main() {
                 .document_footer("Scan to test limits of your printing and scanning process")
                 .total_pages(1)
                 .finalize();
-            let stresstest = StressTestPage::new(&writer)
+            let stress_test = StressTestPage::new()
                 .finalize();
-            stresstest.output();
+            stress_test.encode(&writer);
         }
         else {
             // Encode normal data.
@@ -134,6 +139,11 @@ fn main() {
         let in_file = matches.value_of("input").unwrap();
         if matches.is_present("stresstest") {
             // Decode a stress test page.
+            let reader = ArchiveHumanInputFile::new(in_file, format)
+                .finalize();
+            let stress_test = StressTestPage::new()
+                .finalize();
+            stress_test.decode(&reader);
         }
         else {
             // Decode normal data.

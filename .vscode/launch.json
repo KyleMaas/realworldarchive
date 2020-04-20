@@ -10,7 +10,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/${workspaceRootFolderName}",
-            "args": ["-e", "-D", "120", "-t", "-o", "stresstest.png"],
+            "args": ["-d", "-D", "120", "-t", "-i", "stresstest.png"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

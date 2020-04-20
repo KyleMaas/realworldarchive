@@ -1,4 +1,6 @@
 use crate::archive_human_output_file::*;
+use crate::archive_human_input_file::*;
+use crate::grayscale_recognizer::recognize_grayscale_barcodes;
 extern crate image;
 use image::{RgbImage, Rgb};
 use image::imageops;
@@ -8,20 +10,17 @@ use qrcode::QrCode;
 use qrcode::bits::Bits;
 use qrcode::types::{Version, EcLevel, Mode};
 
-pub struct StressTestPage<'a> {
-    writer: &'a ArchiveHumanOutputFile<'a>
+pub struct StressTestPage {
 }
 
-impl<'a> StressTestPage<'a> {
-    pub fn new(writer: &'a ArchiveHumanOutputFile) -> StressTestPage<'a> {
+impl<'a> StressTestPage {
+    pub fn new() -> StressTestPage {
         StressTestPage {
-            writer: writer
         }
     }
 
-    pub fn finalize(self) -> StressTestPage<'a> {
+    pub fn finalize(self) -> StressTestPage {
         StressTestPage {
-            writer: self.writer
         }
     }
 
@@ -96,10 +95,10 @@ impl<'a> StressTestPage<'a> {
         out_image
     }
 
-    pub fn output(&self) {
+    pub fn encode(&self, writer: &ArchiveHumanOutputFile) {
         // Maximum DPI will be native resolution.  Each successive decrease in resolution will be by half, resulting in full pixels.
-        let barcode_image_size = self.writer.get_barcode_image_size();
-        let full_dpi = self.writer.get_dpi();
+        let barcode_image_size = writer.get_barcode_image_size();
+        let full_dpi = writer.get_dpi();
 
         // Build an output page.
         let mut out_image = RgbImage::new(barcode_image_size.0, barcode_image_size.1);
@@ -131,7 +130,7 @@ impl<'a> StressTestPage<'a> {
         }
 
         // Now do one for color.
-        let colors = self.writer.get_colors();
+        let colors = writer.get_colors();
         let num_bits_colors = (colors.len() as f64).log(2.0) as u8;
         println!("We can generate {} barcodes for {} colors", num_bits_colors, colors.len());
         for y in 0..4 {
@@ -155,6 +154,18 @@ impl<'a> StressTestPage<'a> {
         }
 
         // Feed it to the writer.
-        self.writer.write_page(&out_image, 0);
+        writer.write_page(&out_image, 0);
+    }
+
+    pub fn decode(&self, reader: &ArchiveHumanInputFile) {
+        println!("Reading image");
+        let image = reader.read_page().unwrap();
+
+        // For now, convert to B&W.
+        let bw = image.into_luma();
+        let barcodes = recognize_grayscale_barcodes(&bw);
+        for b in barcodes {
+            println!("{}", String::from_utf8(b).unwrap());
+        }
     }
 }

@@ -190,6 +190,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
 
 [[package]]
+name = "exoquant"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5048aeecde83b7455a63b44aa54da5321d6171cff2adb8a5959849e142e5e4aa"
+
+[[package]]
 name = "g2gen"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -660,6 +666,7 @@ name = "realworldarchive"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "exoquant",
  "hsl",
  "image 0.23.3",
  "imageproc",
