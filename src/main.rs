@@ -1,7 +1,9 @@
 extern crate clap;
 use clap::{Arg, App};
 extern crate image;
-extern crate rqrr;
+//extern crate rqrr;
+extern crate bardecoder;
+extern crate env_logger;
 
 mod stress_test_page;
 mod archive_human_output_file;
@@ -26,6 +28,8 @@ fn validate_positive_float(v: String) -> Result<(), String> {
 }
 
 fn main() {
+    env_logger::init();
+
     let matches = App::new("Real World Archive")
                     .version("0.0.1")
                     .author("Kyle Maas <kylemaasdev@gmail.com>")

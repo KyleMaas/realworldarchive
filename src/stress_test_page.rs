@@ -162,7 +162,7 @@ impl<'a> StressTestPage {
         let image = reader.read_page().unwrap();
 
         // For now, convert to B&W.
-        let bw = image.into_luma();
+        let bw = image; //.into_luma();
         let barcodes = recognize_grayscale_barcodes(&bw);
         for b in barcodes {
             println!("{}", String::from_utf8(b).unwrap());

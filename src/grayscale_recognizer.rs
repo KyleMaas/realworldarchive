@@ -1,22 +1,23 @@
-use image::GrayImage;
-use rqrr::PreparedImage;
+use image::{DynamicImage, GenericImageView};
+use image::imageops::FilterType;
+//use rqrr::PreparedImage;
+use bardecoder;
 
-pub fn recognize_grayscale_barcodes(in_image: &GrayImage) -> Vec<Vec<u8>> {
+pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
+    // Need GenericImageView trait to be able to use width() and height().
+    let sized_up = in_image; //in_image.resize(in_image.width() * 4, in_image.height() * 4, FilterType::Nearest);
     let mut recognized_fragments = vec![];
 
-    // Egad, this is a horrible way to do this, but I can't seem to get PreparedImage to take a GrayImage.
-    let mut rqrr_img = PreparedImage::prepare_from_greyscale(in_image.width()as usize, in_image.height() as usize, |x:usize, y:usize| -> u8 { in_image.get_pixel(x as u32, y as u32).0[0] });
+    let decoder = bardecoder::default_decoder();
 
-    println!("Image size: {} x {}", in_image.width(), in_image.height());
-
-    let grids = rqrr_img.detect_grids();
-    println!("{} Barcodes found", grids.len());
-
-    for g in grids {
-        let (_meta, content) = g.decode().unwrap();
-        println!("Found barcode with content {}", content);
-        recognized_fragments.push(content.as_bytes().to_vec());
+    println!("Attempting to decode");
+    let results = decoder.decode(&sized_up);
+    println!("Done decoding");
+    for result in results {
+        match result {
+            Result::Ok(r) => recognized_fragments.push(r.as_bytes().to_vec()),
+            Result::Err(e) => println!("Error in QR code results: {}", e),
+        }
     }
-
     recognized_fragments
 }

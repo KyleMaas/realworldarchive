@@ -6,24 +6,29 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) Launch",
-            "type": "cppdbg",
+            // Requires extension CodeLLDB.
+            "name": "Debug", //"(gdb) Launch",
+            "type": "lldb", //"cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/${workspaceRootFolderName}",
             "args": ["-d", "-D", "120", "-t", "-i", "stresstest.png"],
-            "stopAtEntry": false,
+            //"stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": true,
-            "MIMode": "gdb",
+            //"environment": [],
+            //"externalConsole": true,
+            //"MIMode": "gdb",
             "preLaunchTask": "cargo build",
-            "setupCommands": [
+            /*"setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
                     "text": "-enable-pretty-printing",
                     "ignoreFailures": true
                 }
-            ]
+            ]*/
+            "env": {
+                "RUST_LOG": "debug,info,warn,error,bardecoder=debug",
+                "RUST_BACKTRACE": "1",
+            },
         }
     ]
 }

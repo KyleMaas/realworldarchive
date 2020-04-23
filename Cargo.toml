@@ -9,11 +9,16 @@ edition = "2018"
 [dependencies]
 qrcode = "0.12.0"
 # quirs = "0.1.1"
-rqrr = "0.2.0"
+# rqrr = "0.2.0"
+# bardecoder = "0.2.1"
+bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2", features = [ "debug-images" ] }
+# bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2" }
 reed-solomon = "0.2.1"
 clap = "2.33.0"
-image = "0.23.3"
+image = "0.23.4"
 imageproc = "0.20.0"
 rusttype = "0.8.2"
 hsl = "0.1.1"
 exoquant = "0.2.0"
+log = "0.4.8"
+env_logger = "0.7.1"
