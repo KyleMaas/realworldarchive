@@ -3,12 +3,24 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "cargo build",
             "type": "cargo",
-            "subcommand": "build",
+            "command": "build",
             "problemMatcher": [
-                "$rustc"
-            ]
+                "$rustc",
+                "$rust-panic"
+            ],
+            "group": "build",
+            "label": "cargo build"
+        },
+        {
+            "type": "cargo",
+            "command": "build",
+            "problemMatcher": [
+                "$rustc",
+                "$rust-panic"
+            ],
+            "group": "build",
+            "label": "rust: cargo build"
         }
     ]
 }
