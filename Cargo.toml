@@ -11,7 +11,7 @@ qrcode = "0.12.0"
 # quirs = "0.1.1"
 # rqrr = "0.2.0"
 # bardecoder = "0.2.1"
-bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2", features = [ "debug-images" ] }
+bardecoder = { version = "0.2.2", path = "../bardecoder", features = [ ] }
 # bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2" }
 reed-solomon = "0.2.1"
 clap = "2.33.0"

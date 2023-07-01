@@ -74,7 +74,7 @@ dependencies = [
 
 [[package]]
 name = "bardecoder"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "failure",
  "failure_derive",
