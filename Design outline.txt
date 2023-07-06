@@ -70,11 +70,10 @@ Represents only the data area of a page - where the barcodes are actually stored
 * Given an output image size, in pixels
 * Given a barcoding system (QR code, Datamatrix, etc.)
 * Optionally given a color palette (default of black and white) to use to either multiplex binary barcodes.  Must be an array of >=2 elements with a length that's a power of two
-* Optionally given a damage likihood map
+* Optionally given a damage likihood map function
 * Optionally given the output format version number, for compatibility with older software.  If not given, default to the latest supported version.
-* If this is a parity page, given an integer indicating which page of parity it is so we can put it in the offset.
 * Returns how much data this page can hold
-* Can be given a page number, total number of pages in document, boolean indicating whether this is the last page in a data segment or parity segment, document checksum (see barcode data format) and data of the maximum size or less, which returns an image which fits the parameters
+* Can be given a page number, total number of pages in document, boolean indicating whether this is the last page in a data segment or parity segment, an integer indicating which page of parity it is if it is a parity page so that it can be put into the offset, document checksum (see barcode data format) and data of the maximum size or less, which returns an image which fits the parameters
 
 InputFileReader
 A reader for a given input file.
