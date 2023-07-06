@@ -9,9 +9,13 @@ mod stress_test_page;
 mod archive_human_output_file;
 mod archive_human_input_file;
 mod grayscale_recognizer;
+mod input_file_reader;
+mod page_barcode_packer;
 use stress_test_page::StressTestPage;
 use archive_human_output_file::{OutputFormat, ArchiveHumanOutputFile};
 use archive_human_input_file::ArchiveHumanInputFile;
+use input_file_reader::InputFileReader;
+use page_barcode_packer::{BarcodeFormat, PageBarcodePacker};
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {
@@ -136,6 +140,18 @@ fn main() {
         else {
             // Encode normal data.
             let in_file = matches.value_of("input").unwrap();
+            let out_file = matches.value_of("output").unwrap();
+            let file_reader = InputFileReader::new(in_file).finalize();
+            let header = in_file;
+            let writer = ArchiveHumanOutputFile::new(out_file, format)
+                .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
+                .dpi(dpi.parse::<u16>().unwrap())
+                .document_header(&header)
+                .finalize();
+            let (w, h) = writer.get_barcode_image_size();
+            let mut barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
+                .finalize();
+            println!("Total bytes per page: {}", barcode_packer.data_bytes_per_page());
         }
     }
     else {
