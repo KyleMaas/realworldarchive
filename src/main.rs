@@ -4,6 +4,7 @@ extern crate image;
 //extern crate rqrr;
 extern crate bardecoder;
 extern crate env_logger;
+use image::RgbImage;
 
 mod stress_test_page;
 mod archive_human_output_file;
@@ -141,7 +142,7 @@ fn main() {
             // Encode normal data.
             let in_file = matches.value_of("input").unwrap();
             let out_file = matches.value_of("output").unwrap();
-            let file_reader = InputFileReader::new(in_file).finalize();
+            let mut file_reader = InputFileReader::new(in_file).finalize();
             let header = in_file;
             let writer = ArchiveHumanOutputFile::new(out_file, format)
                 .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
@@ -149,9 +150,31 @@ fn main() {
                 .document_header(&header)
                 .finalize();
             let (w, h) = writer.get_barcode_image_size();
-            let mut barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
+            let barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
                 .finalize();
             println!("Total bytes per page: {}", barcode_packer.data_bytes_per_page());
+            
+            // Write to image files as a quick test.
+            let mut out_image = RgbImage::new(w, h);
+            let mut start_offset: u64 = 0;
+            let total_len = file_reader.stream_len();
+            println!("Checking for data bytes per page");
+            let block_size = barcode_packer.data_bytes_per_page() as u64;
+            println!("Block size: {}", block_size);
+            let mut block_buffer: Vec<u8> = vec![];
+            let file_checksum = file_reader.file_hash();
+            let total_pages = ((total_len + (block_size - 1)) / block_size) as u32; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
+            while start_offset < total_len {
+                let page_number = (start_offset / block_size) as u32;
+                println!("Generating page {}", page_number);
+                file_reader.get_chunk(start_offset, block_buffer.as_mut_slice());
+                let last_page = page_number == total_pages;
+                barcode_packer.encode(&mut out_image, page_number, total_pages, last_page, 0, file_checksum, block_buffer.as_slice());
+                let numbered_filename = format!("{}{}.png", out_file, page_number);
+                println!("Writing to {}", numbered_filename);
+                out_image.save(numbered_filename).unwrap();
+                start_offset += block_size;
+            }
         }
     }
     else {

@@ -12,7 +12,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/${workspaceRootFolderName}",
             //"args": ["-d", "-D", "120", "-t", "-i", "stresstest.png"],
-            "args": ["-e", "-i", "stresstest.png", "-o", "encodedfile.png"],
+            "args": ["-e", "-i", "stresstest.png", "-o", "test_out/encodedfile.png"],
             //"stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             //"environment": [],
