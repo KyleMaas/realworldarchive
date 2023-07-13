@@ -90,9 +90,9 @@ fn main() {
                     .arg(Arg::with_name("dpi")
                         .short("D")
                         .long("dpi")
-                        .help("Target DPI.  Defaults to \"600\"")
+                        .help("Target DPI.  Defaults to \"300\"")
                         .validator(validate_integer)
-                        .default_value("600"))
+                        .default_value("300"))
                     .arg(Arg::with_name("decode")
                         .short("d")
                         .long("decode")
@@ -150,20 +150,27 @@ fn main() {
                 .document_header(&header)
                 .finalize();
             let (w, h) = writer.get_barcode_image_size();
-            let barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
+            let mut barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
                 .finalize();
-            println!("Total bytes per page: {}", barcode_packer.data_bytes_per_page());
+            println!("Maximum bytes per page: {}", barcode_packer.data_bytes_per_page());
+
+            // Let's see if we can optimize that to expand barcodes to their maximum size.
+            // This is almost always only going to be possible when the document itself can very easily fit on a single page.
+            let mut start_offset: u64 = 0;
+            let total_len = file_reader.stream_len();
+            let max_block_size = barcode_packer.data_bytes_per_page() as u64;
+            let total_pages_at_max_data_rate = ((total_len + (max_block_size - 1)) / max_block_size) as u16; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
+            let min_bytes_per_page = ((total_len + (total_pages_at_max_data_rate as u64 - 1)) / (total_pages_at_max_data_rate as u64)) as u32; // Redividing this so we can round properly.
+            while barcode_packer.repack_barcodes_for_page_length(min_bytes_per_page) {};
+            println!("Ideal bytes per page: {}", barcode_packer.data_bytes_per_page());
             
             // Write to image files as a quick test.
             let mut out_image = RgbImage::new(w, h);
-            let mut start_offset: u64 = 0;
-            let total_len = file_reader.stream_len();
             println!("Checking for data bytes per page");
             let block_size = barcode_packer.data_bytes_per_page() as u64;
             println!("Block size: {}", block_size);
             let mut block_buffer: Vec<u8> = vec![];
             let file_checksum = file_reader.file_hash();
-            //let total_pages = ((total_len + (block_size - 1)) / block_size) as u16; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
             while start_offset < total_len {
                 let page_number = (start_offset / block_size) as u16;
                 println!("Generating page {}", page_number);

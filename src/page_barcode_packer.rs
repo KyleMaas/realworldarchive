@@ -176,6 +176,22 @@ impl<'a> PageBarcodePacker {
         self.packing_cached = true;
     }
 
+    pub fn repack_barcodes_for_page_length(&mut self, min_needed_length: u32) -> bool {
+        // TODO: Implement this function such that we can try to expand the size of barcodes by integer multiples of the pixel size so we can use larger, lower-DPI barcodes for better readability.
+        // Return code indicates if we were able to successfully fit the required quantity of data onto the page at a different resolution.
+        if min_needed_length > self.cache_bytes_per_page {
+            panic!("We can only try to shrink the capacity of pages, not grow them.")
+        }
+        else if min_needed_length == self.cache_bytes_per_page {
+            // We're already optimized - no sense in trying anything less.
+            // Let the caller know that we've expanded the barcodes to the largest size we can.
+            return false;
+        }
+        // TODO: Actual implementation here.
+        // Always returning false here until we can actually implement the optimization system.
+        return false;
+    }
+
     pub fn data_bytes_per_page(&self) -> u32 {
         self.cache_bytes_per_page
     }
