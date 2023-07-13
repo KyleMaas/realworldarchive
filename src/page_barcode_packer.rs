@@ -1,7 +1,11 @@
 use image::Rgb;
+use image::imageops;
+use qrcode::QrCode;
 use qrcode::bits::Bits;
 use qrcode::types::{Version, EcLevel, Mode};
 use image::RgbImage;
+use imageproc::rect::Rect;
+use imageproc::drawing::*;
 
 // Quiet zone size between QR codes, in pixels.  Default is a little more than the required 4, but not 10 like some folks recommend.  If this is unreliable, we might need to change it.
 const QUIET_ZONE_SIZE:u8 = 6;
@@ -120,7 +124,7 @@ impl<'a> PageBarcodePacker {
         let qrv = Version::Normal(v);
         let barcode_size: u32 = qrv.width() as u32;
         self.cache_bytes_per_page = 0;
-        while next_y < self.width {
+        while next_y < self.height {
             let dl = (self.damage_likelihood_map)((next_x + barcode_size / 2) as f32 / self.width as f32, (next_y + barcode_size / 2) as f32 / self.height as f32);
             let ec = 
                 if dl >= 0.0 && dl < 0.25 {
@@ -176,7 +180,89 @@ impl<'a> PageBarcodePacker {
         self.cache_bytes_per_page
     }
 
-    pub fn encode(&self, out_image: &mut RgbImage, page_number: u32, total_pages: u32, is_last_page: bool, parity_index: u16, file_checksum: u32, data: &[u8]) {
+    fn generate_barcode_filling_bits(&self, qrcode_version: Version, ec_level: EcLevel, byte_array: &[u8]) -> Bits {
+        let mut bits = Bits::new(qrcode_version);
+        bits.push_byte_data(byte_array).unwrap();
+        bits.push_terminator(ec_level).unwrap();
+        bits
+    }
 
+    fn render_barcode(&self, b_info: &BarcodeInfo, data: &[u8]) -> RgbImage {
+        let bits = self.generate_barcode_filling_bits(b_info.version, b_info.ec_level, data);
+        let code = QrCode::with_bits(bits, b_info.ec_level).unwrap();
+        let code_image = code.render::<Rgb<u8>>().module_dimensions(1, 1).quiet_zone(false).build();
+        code_image
+    }
+
+    pub fn encode(&self, out_image: &mut RgbImage, page_number: u16, is_parity_page: bool, parity_index: u16, file_checksum: u32, page_start_offset: u64, total_length: u64, data: &[u8]) {
+        // Pulling this out into its own reference so we can pseudorandomize this later.
+        let barcodes: &Vec<BarcodeInfo> = &self.cache_barcodes;
+
+        // Fill the background with white so we don't have to do a quiet zone for each barcode individually.
+        draw_filled_rect_mut(out_image, Rect::at(0, 0).of_size(out_image.width(), out_image.height()), Rgb([255, 255, 255]));
+
+        let mut start_offset: usize = 0;
+        for (b, b_info) in barcodes.iter().enumerate() {
+            println!("Generating page {} barcode {}/{}", page_number, b, barcodes.len());
+            // Pull in the amount of data we need to fill this barcode, padded out with zeroes.
+            let mut barcode_data: Vec<u8> = vec!();
+
+            // First byte - format version.
+            barcode_data.push(self.format_version);
+
+            // Next two bytes - page number, big endian.
+            let page_number_bytes = page_number.to_be_bytes();
+            barcode_data.extend_from_slice(&page_number_bytes);
+
+            // Next two bytes - barcode number, big endian, with some metadata bits.
+            let mut byte_1 = ((b >> 16) & 0x0f) as u8;
+            let byte_2 = (b & 0xff) as u8;
+            if is_parity_page {
+                byte_1 |= 0b1000000;
+            }
+            barcode_data.push(byte_1);
+            barcode_data.push(byte_2);
+
+            // Next 6 bytes - offset from the start of the file, big endian.
+            // TODO: This might need to be the parity page number we're encoding.
+            let start_offset_bytes = page_start_offset.to_be_bytes();
+            barcode_data.extend_from_slice(&start_offset_bytes[2..8]);
+
+            // Next 6 bytes - total document length, big endian.
+            let total_length_bytes = total_length.to_be_bytes();
+            barcode_data.extend_from_slice(&total_length_bytes[2..8]);
+
+            // Next 3 bytes - lower bytes document checksum, big endian.
+            let checksum_bytes = file_checksum.to_be_bytes();
+            barcode_data.extend_from_slice(&checksum_bytes[1..4]);
+
+            let overhead = barcode_data.len();
+            let data_capacity = (b_info.capacity as usize) - overhead;
+
+            let mut v: Vec<u8>;
+            let barcode_slice: &[u8];
+            if (start_offset + data_capacity) < data.len() {
+                // We can pull a full slice.
+                barcode_slice = &data[start_offset..(start_offset + data_capacity)];
+            }
+            else if start_offset < data.len() {
+                // We can pull a partial slice.
+                v = data[(start_offset as usize)..data.len()].to_vec();
+                v.resize(data_capacity, 0);
+                barcode_slice = v.as_slice();
+            }
+            else {
+                // We have to just use padding.
+                v = vec![0 as u8; data_capacity];
+                barcode_slice = v.as_slice();
+            };
+            barcode_data.extend_from_slice(barcode_slice);
+
+            let code_image = self.render_barcode(&b_info, &barcode_data);
+            imageops::overlay(out_image, &code_image, b_info.x, b_info.y);
+
+            // Advance the offset for the next barcode.
+            start_offset += b_info.capacity as usize;
+        }
     }
 }

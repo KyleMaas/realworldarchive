@@ -163,13 +163,13 @@ fn main() {
             println!("Block size: {}", block_size);
             let mut block_buffer: Vec<u8> = vec![];
             let file_checksum = file_reader.file_hash();
-            let total_pages = ((total_len + (block_size - 1)) / block_size) as u32; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
+            //let total_pages = ((total_len + (block_size - 1)) / block_size) as u16; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
             while start_offset < total_len {
-                let page_number = (start_offset / block_size) as u32;
+                let page_number = (start_offset / block_size) as u16;
                 println!("Generating page {}", page_number);
                 file_reader.get_chunk(start_offset, block_buffer.as_mut_slice());
-                let last_page = page_number == total_pages;
-                barcode_packer.encode(&mut out_image, page_number, total_pages, last_page, 0, file_checksum, block_buffer.as_slice());
+                //let last_page = page_number == total_pages;
+                barcode_packer.encode(&mut out_image, page_number, false, 0, file_checksum, start_offset, total_len, block_buffer.as_slice());
                 let numbered_filename = format!("{}{}.png", out_file, page_number);
                 println!("Writing to {}", numbered_filename);
                 out_image.save(numbered_filename).unwrap();

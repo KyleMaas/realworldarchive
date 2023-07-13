@@ -27,6 +27,8 @@ Metadata fields are to remain a constant length across the entire document.  Thi
 
 Barcodes can be distributed around the page in any order, ideally at (pseudo-)random.  The barcode number can then be used to sort their data back into order.  Really, although this would be difficult to do with the damage likelihood map, they probably should be pseudo-randomized in a stable manner for best protection against problems in the same spot on multiple pages.
 
+We would also need to figure out how to do parity correctly with pseudorandomized ordering.  It would make it much more durable to damage to the same places across the entire document (water damage that bleeds the ink out of one corner of all of the pages, for example) but it has the potential to complicate the parity process significantly and introduce far more unnecessary disk seeks to generate parity if we're not careful.
+
 Data is to be padded out to fit the end of the final page, which is why we're included a total data length.  This padding is included in the parity calculations and can be anything which is stable across runs - zeroes or stable pseudorandom data.  For the initial encoder version, we may be using zeroes.  But even if we are, the reader cannot assume this and must read this data for the purposes of parity checking.
 
 Parity is generated across the entire document.  The first parity byte is the parity of the first bytes of all pages.  The second parity byte is the parity of the second bytes of all pages.  Although exceedingly time-consuming to generate, and requiring tons of seeks across the source file, this means the error correction covers the entire file.  If we did it more segmented, loss could only occur a few times per segment.
@@ -34,6 +36,8 @@ Additional pages of parity are subsequent parity output for the exact same input
 Since we're doing this parity calculation essentially striped across the entire document, the final page data padding must be taken into account for parity calculations.
 
 Barcodes should be able to be read independently of the rest of the document.  This means you should be able to tell where your page is in a document using only a fragment of a surviving page.  This wastes some space, but means we can put fewer constraints on the human side of the storage and scanning process and allow for more human error without data loss.
+
+TODO: Figure out how to do on-page parity as well, so pages can contain both data and parity.  This would allow for short documents to be single-page and still include parity, and would also add an extra level of durability and validation against damage.
 
 Each barcode is encoded as follows (nominally 20 bytes wasted per barcode when using version 1):
 Format version: encoded similarly to UTF-8 - at this time, the high bit is reserved for this for later use and we can assume the version will be one byte for quite a few versions.
