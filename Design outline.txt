@@ -91,7 +91,7 @@ The placeholder is removed and white added to the end:
 6 = Planes 110 = 240 deg/100%/100% HSV (Blue)
 7 = Planes 111 = 0 deg/0%/100% HSV (White)
 
-So, for example, if a pixel was printed as blue but scanned and quantized as cyan, we only have one bit plane which is flipped.  The most problematic "similar colors" detection problem is likely to be confusing yellow and white, since that results in two bit planes being flipped in the output.  However, for any other colors which are similar to each other, it should more often than not only result in a single bit being corrupted, and since it's unlikely that every color combination will be as easily corrupted, single bit flips are relatively likely to be corrected by the error correction inherent in the barcodes themselves.
+So, for example, if a pixel was printed as blue but scanned and quantized as fuschia, we only have one bit plane which is flipped.  In this example, cyan and blue are somewhat problematic because of the shift for white.  However, the idea is that when generalized to an arbitrary power-of-two palette length, incorrect quantization should more often than not only result in a single bit being corrupted, and since it's unlikely that every color combination will be as easily corrupted, single bit flips are relatively likely to be corrected by the error correction inherent in the barcodes themselves.
 
 
 
