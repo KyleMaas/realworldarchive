@@ -172,7 +172,8 @@ fn main() {
             let mut block_buffer: Vec<u8> = vec![];
             let file_checksum = file_reader.file_hash();
             while start_offset < total_len {
-                let page_number = (start_offset / block_size) as u16;
+                // Page numbers are 1-based to match what's shown to the user.
+                let page_number = ((start_offset / block_size) as u16) + 1;
                 println!("Generating page {}", page_number);
                 file_reader.get_chunk(start_offset, block_buffer.as_mut_slice());
                 //let last_page = page_number == total_pages;

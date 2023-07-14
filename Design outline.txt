@@ -41,7 +41,7 @@ TODO: Figure out how to do on-page parity as well, so pages can contain both dat
 
 Each barcode is encoded as follows (nominally 20 bytes wasted per barcode when using version 1):
 Format version: encoded similarly to UTF-8 - at this time, the high bit is reserved for this for later use and we can assume the version will be one byte for quite a few versions.
-Page number: 16-bit big endian unsigned integer.  More compact than storing "bytes per page" and can be used to easily make user interfaces for partial scanning or recovering missing pages.  Total page counts include the parity pages.
+Page number: 16-bit big endian unsigned integer.  More compact than storing "bytes per page" and can be used to easily make user interfaces for partial scanning or recovering missing pages.  Total page counts include the parity pages.  Page numbers are 1-based so the data representation matches what's displayed to the user and optionally shown in printable page metadata.
 Barcode number on page: 16-bit big endian unsigned integer/bitfield (required so we can recover from barcodes out of order or some barcodes unrecoverable):
 * 16: Whether this is a parity page
 * 15: (Not sure we actually need this.  Leaving unimplemented for now.  If not used in completed implementation, drop it.) Whether this is the last barcode in the regular data or parity sections.  For both sections, their last barcode should have this bit set.
@@ -78,6 +78,7 @@ Represents only the data area of a page - where the barcodes are actually stored
 * Optionally given the output format version number, for compatibility with older software.  If not given, default to the latest supported version.
 * Returns how much data this page can hold
 * Can be given a page number, total number of pages in document, boolean indicating whether this is the last page in a data segment or parity segment, an integer indicating which page of parity it is if it is a parity page so that it can be put into the offset, document checksum (see barcode data format) and data of the maximum size or less, which returns an image which fits the parameters
+* Can be asked to re-optimize for a different minimum per-page length, so on the off-chance we can still fit as much data as we need at a larger barcode size, we can do that.
 
 InputFileReader
 A reader for a given input file.
