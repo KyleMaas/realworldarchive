@@ -298,6 +298,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "gray-codes"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8eb53f38e7f2e30ad98faf6a15a3b1135c45a1b9740f71fba53438437bf2a25"
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -718,6 +724,7 @@ dependencies = [
  "crc32fast",
  "env_logger",
  "exoquant",
+ "gray-codes",
  "hsl",
  "image",
  "imageproc",

@@ -12,11 +12,13 @@ mod archive_human_input_file;
 mod grayscale_recognizer;
 mod input_file_reader;
 mod page_barcode_packer;
+mod color_multiplexer;
 use stress_test_page::StressTestPage;
 use archive_human_output_file::{OutputFormat, ArchiveHumanOutputFile};
 use archive_human_input_file::ArchiveHumanInputFile;
 use input_file_reader::InputFileReader;
 use page_barcode_packer::{BarcodeFormat, PageBarcodePacker};
+use color_multiplexer::ColorMultiplexer;
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {
@@ -93,6 +95,12 @@ fn main() {
                         .help("Target DPI.  Defaults to \"300\"")
                         .validator(validate_integer)
                         .default_value("300"))
+                    .arg(Arg::with_name("colors")
+                        .short("c")
+                        .long("colors")
+                        .help("Maximum number of colors.  Defaults to \"2\" for monochrome")
+                        .validator(validate_integer)
+                        .default_value("2"))
                     .arg(Arg::with_name("decode")
                         .short("d")
                         .long("decode")
@@ -120,6 +128,7 @@ fn main() {
     let width = matches.value_of("pagewidth").unwrap();
     let height = matches.value_of("pageheight").unwrap();
     let dpi = matches.value_of("dpi").unwrap();
+    let colors = matches.value_of("colors").unwrap();
     let format = OutputFormat::PNG; //matches.value_of("format").unwrap().to_lowercase();
     if matches.is_present("encode") {
         // Encode.
@@ -143,6 +152,7 @@ fn main() {
             let in_file = matches.value_of("input").unwrap();
             let out_file = matches.value_of("output").unwrap();
             let mut file_reader = InputFileReader::new(in_file).finalize();
+            let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
             let header = in_file;
             let writer = ArchiveHumanOutputFile::new(out_file, format)
                 .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
@@ -151,6 +161,7 @@ fn main() {
                 .finalize();
             let (w, h) = writer.get_barcode_image_size();
             let mut barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
+                .color_multiplexer(color_multiplexer)
                 .finalize();
             println!("Maximum bytes per page: {}", barcode_packer.data_bytes_per_page());
 
@@ -169,15 +180,26 @@ fn main() {
             println!("Checking for data bytes per page");
             let block_size = barcode_packer.data_bytes_per_page() as u64;
             println!("Block size: {}", block_size);
-            let mut block_buffer: Vec<u8> = vec![];
+            let mut block_buffer_vec: Vec<u8> = vec![];
+            for _b in 0..block_size {
+                block_buffer_vec.push(0);
+            }
+            let block_buffer: &mut [u8] = block_buffer_vec.as_mut_slice();
             let file_checksum = file_reader.file_hash();
+            println!("File checksum: {}", file_checksum);
             while start_offset < total_len {
                 // Page numbers are 1-based to match what's shown to the user.
                 let page_number = ((start_offset / block_size) as u16) + 1;
                 println!("Generating page {}", page_number);
-                file_reader.get_chunk(start_offset, block_buffer.as_mut_slice());
+                let actually_read = file_reader.get_chunk(start_offset, block_buffer);
+                if actually_read < block_size as usize {
+                    // Pad the data.
+                    for i in actually_read..(block_size as usize) {
+                        block_buffer[i] = 0;
+                    }
+                }
                 //let last_page = page_number == total_pages;
-                barcode_packer.encode(&mut out_image, page_number, false, 0, file_checksum, start_offset, total_len, block_buffer.as_slice());
+                barcode_packer.encode(&mut out_image, page_number, false, 0, file_checksum, start_offset, total_len, block_buffer);
                 let numbered_filename = format!("{}{}.png", out_file, page_number);
                 println!("Writing to {}", numbered_filename);
                 out_image.save(numbered_filename).unwrap();

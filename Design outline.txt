@@ -60,36 +60,36 @@ Color multiplexing
 ==================
 For a given set of colors, a palette would be generated which spaces the colors evenly (or nearly so) over the hue space (in an HSV color model), with white and black both included.  The palette is then rearranged in Gray code order - the idea being that when scanned, if the hue is quantized into an adjoining hue bucket, it will ideally only cause a bit flip in one of the output bit planes.  The exception to this order is that white and black need to be mapped to all 1 and all 0, respectively, so the location features of QR codes are still visible as monochrome.  Black should map correctly regardless if it's at position 0, white needs to be dealt with separately, as detailed in the example below, to ensure that it is always the last color in the palette.  Planes would be encoded in this by iterating pixel-by-pixel, combining the planes together into a number, and then using the Gray-coded palette to generate a color output pixel.  Conversely, when decoding, the image is first quantized into the hue palette and then decoded into monochrome pixels using the bits in the palette index.  So, for an example with 8 colors, the color palette would be generated as as follows with white being excluded at this step:
 
-0 = 0 deg/0%/0% HSV (Black)
-1 = 0 deg/100%/100% HSV (Red)
-2 = 60 deg/100%/100% HSV (Yellow)
-3 = 120 deg/100%/100% HSV (Green)
-4 = 180 deg/100%/100% HSV (Cyan)
-5 = 240 deg/100%/100% HSV (Blue)
-6 = 300 deg/100%/100% HSV (Fuschia)
+0 = 0 deg/0%/0% HSL (Black)
+1 = 0 deg/100%/100% HSL (Red)
+2 = 60 deg/100%/50% HSL (Yellow)
+3 = 120 deg/100%/50% HSL (Green)
+4 = 180 deg/100%/50% HSL (Cyan)
+5 = 240 deg/100%/50% HSL (Blue)
+6 = 300 deg/100%/50% HSL (Fuschia)
 7 = Placeholder - excluded from generating for now
 
 Then colors are rearranged based on their Gray code mapping:
 
-0 = Gray code 000 = binary 000 (0) = 0 deg/0%/0% HSV (Black)
-1 = Gray code 001 = binary 001 (1) = 0 deg/100%/100% HSV (Red)
-2 = Gray code 010 = binary 011 (3) = 120 deg/100%/100% HSV (Green)
-3 = Gray code 011 = binary 010 (2) = 60 deg/100%/100% HSV (Yellow)
+0 = Gray code 000 = binary 000 (0) = 0 deg/0%/0% HSL (Black)
+1 = Gray code 001 = binary 001 (1) = 0 deg/100%/50% HSV (Red)
+2 = Gray code 010 = binary 011 (3) = 120 deg/100%/50% HSL (Green)
+3 = Gray code 011 = binary 010 (2) = 60 deg/100%/50% HSL (Yellow)
 4 = Gray code 100 = binary 111 (7) = Placeholder
-5 = Gray code 101 = binary 110 (6) = 300 deg/100%/100% HSV (Fuschia)
-6 = Gray code 110 = binary 100 (4) = 180 deg/100%/100% HSV (Cyan)
-7 = Gray code 111 = binary 101 (5) = 240 deg/100%/100% HSV (Blue)
+5 = Gray code 101 = binary 110 (6) = 300 deg/100%/50% HSL (Fuschia)
+6 = Gray code 110 = binary 100 (4) = 180 deg/100%/50% HSL (Cyan)
+7 = Gray code 111 = binary 101 (5) = 240 deg/100%/50% HSL (Blue)
 
 The placeholder is removed and white added to the end:
 
-0 = Planes 000 = 0 deg/0%/0% HSV (Black)
-1 = Planes 001 = 0 deg/100%/100% HSV (Red)
-2 = Planes 010 = 120 deg/100%/100% HSV (Green)
-3 = Planes 011 = 60 deg/100%/100% HSV (Yellow)
-4 = Planes 100 = 300 deg/100%/100% HSV (Fuschia)
-5 = Planes 101 = 180 deg/100%/100% HSV (Cyan)
-6 = Planes 110 = 240 deg/100%/100% HSV (Blue)
-7 = Planes 111 = 0 deg/0%/100% HSV (White)
+0 = Planes 000 = 0 deg/0%/0% HSL (Black)
+1 = Planes 001 = 0 deg/100%/50% HSL (Red)
+2 = Planes 010 = 120 deg/100%/50% HSL (Green)
+3 = Planes 011 = 60 deg/100%/50% HSL (Yellow)
+4 = Planes 100 = 300 deg/100%/50% HSL (Fuschia)
+5 = Planes 101 = 180 deg/100%/50% HSL (Cyan)
+6 = Planes 110 = 240 deg/100%/50% HSL (Blue)
+7 = Planes 111 = 0 deg/0%/100% HSL (White)
 
 So, for example, if a pixel was printed as blue but scanned and quantized as fuschia, we only have one bit plane which is flipped.  In this example, cyan and blue are somewhat problematic because of the shift for white.  However, the idea is that when generalized to an arbitrary power-of-two palette length, incorrect quantization should more often than not only result in a single bit being corrupted, and since it's unlikely that every color combination will be as easily corrupted, single bit flips are relatively likely to be corrected by the error correction inherent in the barcodes themselves.
 
