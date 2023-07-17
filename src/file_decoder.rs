@@ -2,7 +2,7 @@ use crate::archive_human_input_file::*;
 use crate::output_file_writer::*;
 use crate::color_multiplexer::ColorMultiplexer;
 use crate::grayscale_recognizer::recognize_grayscale_barcodes;
-use std::sync::Arc;
+use base45::decode;
 
 pub struct FileDecoder<'a, 'b> {
     file_reader: &'a mut ArchiveHumanInputFile<'a>,
@@ -24,7 +24,10 @@ impl<'a, 'b> FileDecoder<'a, 'b> {
         }
     }
 
-    fn process_decoded_chunk(&mut self, data_chunk: &Vec<u8>, file_writer: &mut OutputFileWriter) {
+    fn process_decoded_chunk(&mut self, encoded_data: &Vec<u8>, file_writer: &mut OutputFileWriter) {
+        // Don't know why there are 4 bytes of junk at the start of this.
+        let data_chunk = decode(&std::str::from_utf8(&encoded_data).unwrap()).unwrap();
+        println!("Decoded chunk {:?}", data_chunk);
         let format_version = data_chunk[0];
         if format_version != 1 {
             panic!("Unsupported format version {}", format_version);
@@ -38,11 +41,12 @@ impl<'a, 'b> FileDecoder<'a, 'b> {
         let overhead: usize = 20;
         if start_offset > total_length {
             //Padding - ignore it.
+            println!("Pure padding - ignoring");
         }
         else if start_offset + (data_chunk.len() - overhead) as u64 > total_length {
             // Partial chunk.
-            println!("Partial chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (total_length as usize - start_offset as usize - overhead));
-            file_writer.put_chunk(start_offset, &data_chunk[overhead..(total_length as usize - start_offset as usize - overhead)]);
+            println!("Partial chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (total_length as usize - start_offset as usize));
+            file_writer.put_chunk(start_offset, &data_chunk[overhead..(total_length as usize - start_offset as usize + overhead)]);
         }
         else {
             println!("Full chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (data_chunk.len() - overhead));
@@ -57,7 +61,6 @@ impl<'a, 'b> FileDecoder<'a, 'b> {
         for d in demuxed_images {
             let chunks = recognize_grayscale_barcodes(&d);
             for c in chunks {
-                println!("Decoded chunk {:?}", c);
                 self.process_decoded_chunk(&c, file_writer);
             }
         }

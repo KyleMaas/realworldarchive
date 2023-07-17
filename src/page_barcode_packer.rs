@@ -7,6 +7,7 @@ use image::RgbImage;
 use imageproc::rect::Rect;
 use imageproc::drawing::*;
 use crate::color_multiplexer::ColorMultiplexer;
+use base45::encode;
 
 // Quiet zone size between QR codes, in pixels.  Default is a little more than the required 4, but not 10 like some folks recommend.  If this is unreliable, we might need to change it.
 const QUIET_ZONE_SIZE:u8 = 6;
@@ -135,7 +136,7 @@ impl<'a> PageBarcodePacker {
         self.cache_bytes_per_page = 0;
         while next_y < self.height {
             let dl = (self.damage_likelihood_map)((next_x + barcode_size / 2) as f32 / self.width as f32, (next_y + barcode_size / 2) as f32 / self.height as f32);
-            let ec = EcLevel::M; /*
+            let ec = 
                 if dl >= 0.0 && dl < 0.25 {
                     EcLevel::L
                 }
@@ -147,10 +148,10 @@ impl<'a> PageBarcodePacker {
                 }
                 else {
                     EcLevel::H
-                };*/
+                };
             let bits = Bits::new(qrv);
             let max_bits = bits.max_len(ec).unwrap();
-            let metadata_bits = Mode::Byte.length_bits_count(qrv) + 4 + qrv.mode_bits_count();
+            let metadata_bits = Mode::Alphanumeric.length_bits_count(qrv) + 4 + qrv.mode_bits_count();
             let max_bytes: u32 = (max_bits - metadata_bits) as u32 / 8;
             let bytes_for_version = 1;
             let bytes_for_page_number = 2;
@@ -158,7 +159,8 @@ impl<'a> PageBarcodePacker {
             let bytes_for_offset = 6;
             let bytes_for_total_length = 6;
             let bytes_for_hash = 3;
-            let data_capacity_per_color_bit: u32 = max_bytes - bytes_for_version - bytes_for_page_number - bytes_for_barcode_number - bytes_for_offset - bytes_for_total_length - bytes_for_hash;
+            let data_capacity_per_color_bit_unencoded: u32 = max_bytes - bytes_for_version - bytes_for_page_number - bytes_for_barcode_number - bytes_for_offset - bytes_for_total_length - bytes_for_hash;
+            let data_capacity_per_color_bit = data_capacity_per_color_bit_unencoded * 2 / 3;
             let data_capacity = data_capacity_per_color_bit;
 
             if next_y + barcode_size > self.height {
@@ -173,7 +175,7 @@ impl<'a> PageBarcodePacker {
                 damage_likelihood: dl,
                 version: qrv,
                 ec_level: ec,
-                mode: Mode::Byte,
+                mode: Mode::Alphanumeric,
                 capacity_per_color_plane: data_capacity
             };
             self.cache_barcodes.push(new_code);
@@ -214,7 +216,8 @@ impl<'a> PageBarcodePacker {
 
     fn generate_barcode_filling_bits(&self, qrcode_version: Version, ec_level: EcLevel, byte_array: &[u8]) -> Bits {
         let mut bits = Bits::new(qrcode_version);
-        bits.push_byte_data(byte_array).unwrap();
+        let encoded = encode(byte_array);
+        bits.push_alphanumeric_data(encoded.as_bytes()).unwrap();
         bits.push_terminator(ec_level).unwrap();
         bits
     }
