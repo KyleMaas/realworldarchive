@@ -159,7 +159,8 @@ impl<'a> PageBarcodePacker {
             let bytes_for_offset = 6;
             let bytes_for_total_length = 6;
             let bytes_for_hash = 3;
-            let data_capacity_per_color_bit_unencoded: u32 = max_bytes - bytes_for_version - bytes_for_page_number - bytes_for_barcode_number - bytes_for_offset - bytes_for_total_length - bytes_for_hash;
+            let overhead = bytes_for_version + bytes_for_page_number + bytes_for_barcode_number + bytes_for_offset + bytes_for_total_length + bytes_for_hash;
+            let data_capacity_per_color_bit_unencoded: u32 = max_bytes - overhead;
             let data_capacity_per_color_bit = data_capacity_per_color_bit_unencoded * 2 / 3;
             let data_capacity = data_capacity_per_color_bit;
 
@@ -324,7 +325,7 @@ impl<'a> PageBarcodePacker {
                 color_planes.push(self.render_barcode(&b_info, &barcode_data));
 
                 // Advance the offset for the next barcode.
-                start_offset += b_info.capacity_per_color_plane as usize;
+                start_offset += data_capacity;
             }
 
             // Multiplex the barcodes.
