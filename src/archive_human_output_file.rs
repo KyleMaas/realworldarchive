@@ -134,19 +134,19 @@ impl<'a> ArchiveHumanOutputFile<'a> {
         draw_filled_rect_mut(&mut out_image, Rect::at(0, 0).of_size(page_width_pixels, page_height_pixels), Rgb([255, 255, 255]));
 
         // Copy the barcode to within the margins.
-        imageops::overlay(&mut out_image, code_image, (self.margins.left * dpi_float) as u32, ((self.margins.top + self.text_height) * dpi_float) as u32);
+        imageops::overlay(&mut out_image, code_image, (self.margins.left * dpi_float) as i64, ((self.margins.top + self.text_height) * dpi_float) as i64);
 
         let num_bits_colors = (self.colors.len() as f64).log(2.0) as u8;
 
         // Add the header.
         let font_data: &[u8] = include_bytes!("Seshat-Regular.ttf");
-        let font = Font::from_bytes(font_data).unwrap();
+        let font = Font::try_from_bytes(font_data).unwrap();
         let header_substituted = self.document_header
             .replace("{{page_num}}", &(page_num.to_string()))
             .replace("{{total_pages}}", &(self.total_pages.to_string()))
             .replace("{{dpi}}", &(self.dpi.to_string()))
             .replace("{{total_overlay_colors}}", &(num_bits_colors.to_string()));
-        draw_text_mut(&mut out_image, Rgb([0, 0, 0]), (self.margins.left * dpi_float) as u32, (self.margins.top * dpi_float) as u32, Scale::uniform(self.text_height * dpi_float), &font, &header_substituted);
+        draw_text_mut(&mut out_image, Rgb([0, 0, 0]), (self.margins.left * dpi_float) as i32, (self.margins.top * dpi_float) as i32, Scale::uniform(self.text_height * dpi_float), &font, &header_substituted);
 
         // Add the footer.
         let footer_substituted = self.document_footer
@@ -155,7 +155,7 @@ impl<'a> ArchiveHumanOutputFile<'a> {
             .replace("{{dpi}}", &(self.dpi.to_string()))
             .replace("{{total_overlay_colors}}", &(num_bits_colors.to_string()));
         let footer_top = page_height_pixels - ((self.margins.bottom + self.text_height) * dpi_float) as u32;
-        draw_text_mut(&mut out_image, Rgb([0, 0, 0]), (self.margins.left * dpi_float) as u32, footer_top, Scale::uniform(self.text_height * dpi_float), &font, &footer_substituted);
+        draw_text_mut(&mut out_image, Rgb([0, 0, 0]), (self.margins.left * dpi_float) as i32, footer_top as i32, Scale::uniform(self.text_height * dpi_float), &font, &footer_substituted);
 
         // Add the color palette, but only if we're actually using colors.
         if self.colors.len() > 2 {

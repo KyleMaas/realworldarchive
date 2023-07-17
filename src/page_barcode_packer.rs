@@ -1,8 +1,8 @@
 use image::Rgb;
 use image::imageops;
-use qrcode::QrCode;
-use qrcode::bits::Bits;
-use qrcode::types::{Version, EcLevel, Mode};
+use qrencode::QrCode;
+use qrencode::bits::Bits;
+use qrencode::types::{Version, EcLevel, Mode};
 use image::RgbImage;
 use imageproc::rect::Rect;
 use imageproc::drawing::*;
@@ -128,14 +128,14 @@ impl<'a> PageBarcodePacker {
         // TODO: Randomize the order of the barcodes on the page.
         let mut next_x: u32 = 0;
         let mut next_y: u32 = 0;
-        let v = 40; // Size ("version") of QR code
+        let v = 20; // Size ("version") of QR code - version 40 does not seem to be recognized well
         let qrv = Version::Normal(v);
         let barcode_size: u32 = qrv.width() as u32;
         self.cache_barcodes.clear();
         self.cache_bytes_per_page = 0;
         while next_y < self.height {
             let dl = (self.damage_likelihood_map)((next_x + barcode_size / 2) as f32 / self.width as f32, (next_y + barcode_size / 2) as f32 / self.height as f32);
-            let ec = 
+            let ec = EcLevel::M; /*
                 if dl >= 0.0 && dl < 0.25 {
                     EcLevel::L
                 }
@@ -147,7 +147,7 @@ impl<'a> PageBarcodePacker {
                 }
                 else {
                     EcLevel::H
-                };
+                };*/
             let bits = Bits::new(qrv);
             let max_bits = bits.max_len(ec).unwrap();
             let metadata_bits = Mode::Byte.length_bits_count(qrv) + 4 + qrv.mode_bits_count();
@@ -250,7 +250,8 @@ impl<'a> PageBarcodePacker {
 
                 // Next two bytes - page number, big endian.
                 let page_number_bytes = page_number.to_be_bytes();
-                barcode_data.extend_from_slice(&page_number_bytes);
+                barcode_data.push(page_number_bytes[0]);
+                barcode_data.push(page_number_bytes[1]);
 
                 // Next two bytes - barcode number, big endian, with some metadata bits.
                 let mut byte_1 = ((full_barcode_index >> 16) & 0x0f) as u8;
@@ -264,17 +265,32 @@ impl<'a> PageBarcodePacker {
                 // Next 6 bytes - offset from the start of the file, big endian.
                 // TODO: This might need to be the parity page number we're encoding.
                 let start_offset_bytes = (page_start_offset + (start_offset as u64)).to_be_bytes();
-                barcode_data.extend_from_slice(&start_offset_bytes[2..8]);
+                barcode_data.push(start_offset_bytes[2]);
+                barcode_data.push(start_offset_bytes[3]);
+                barcode_data.push(start_offset_bytes[4]);
+                barcode_data.push(start_offset_bytes[5]);
+                barcode_data.push(start_offset_bytes[6]);
+                barcode_data.push(start_offset_bytes[7]);
 
                 // Next 6 bytes - total document length, big endian.
                 let total_length_bytes = total_length.to_be_bytes();
-                barcode_data.extend_from_slice(&total_length_bytes[2..8]);
+                barcode_data.push(total_length_bytes[2]);
+                barcode_data.push(total_length_bytes[3]);
+                barcode_data.push(total_length_bytes[4]);
+                barcode_data.push(total_length_bytes[5]);
+                barcode_data.push(total_length_bytes[6]);
+                barcode_data.push(total_length_bytes[7]);
 
                 // Next 3 bytes - lower bytes document checksum, big endian.
                 let checksum_bytes = file_checksum.to_be_bytes();
-                barcode_data.extend_from_slice(&checksum_bytes[1..4]);
+                barcode_data.push(checksum_bytes[1]);
+                barcode_data.push(checksum_bytes[2]);
+                barcode_data.push(checksum_bytes[3]);
 
                 let overhead = barcode_data.len();
+                if overhead != 20 {
+                    panic!("Something went wrong with the format generator - got {} bytes when it should be 20", overhead);
+                }
                 let data_capacity = (b_info.capacity_per_color_plane as usize) - overhead;
 
                 let mut v: Vec<u8>;
@@ -311,7 +327,7 @@ impl<'a> PageBarcodePacker {
             // Multiplex the barcodes.
             let code_image = self.color_multiplexer.multiplex_planes(color_planes);
 
-            imageops::overlay(out_image, &code_image, b_info.x, b_info.y);
+            imageops::overlay(out_image, &code_image, b_info.x as i64, b_info.y as i64);
         }
     }
 }

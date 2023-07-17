@@ -12,8 +12,15 @@
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/${workspaceRootFolderName}",
             //"args": ["-d", "-D", "120", "-t", "-i", "stresstest.png"],
-            "args": ["-e", "-D", "80", "-c", "8", "-i", "seshat-regular.zip", "-o", "test_out/encodedfile.png"],
+            //"args": ["-e", "-D", "80", "-c", "8", "-i", "seshat-regular.zip", "-o", "test_out/encodedfile.png"],
             //"args": ["-e", "-D", "72", "-c", "8", "-i", "stresstest.png", "-o", "test_out/encodedfile.png"],
+
+            //"args": ["-e", "-D", "220", "-i", "stresstest.png", "-o", "test_out/encodedfile.png"],
+            //"args": ["-d", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.png"],
+
+            //"args": ["-e", "-D", "96", "-i", "Design outline.txt", "-o", "test_out/encodedfile.png"],
+            "args": ["-d", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.txt"],
+
             //"stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             //"environment": [],

@@ -4,6 +4,7 @@ extern crate image;
 //extern crate rqrr;
 extern crate bardecoder;
 extern crate env_logger;
+extern crate glob;
 use image::RgbImage;
 
 mod stress_test_page;
@@ -11,14 +12,20 @@ mod archive_human_output_file;
 mod archive_human_input_file;
 mod grayscale_recognizer;
 mod input_file_reader;
+mod output_file_writer;
 mod page_barcode_packer;
 mod color_multiplexer;
+mod file_decoder;
 use stress_test_page::StressTestPage;
 use archive_human_output_file::{OutputFormat, ArchiveHumanOutputFile};
 use archive_human_input_file::ArchiveHumanInputFile;
 use input_file_reader::InputFileReader;
+use output_file_writer::OutputFileWriter;
 use page_barcode_packer::{BarcodeFormat, PageBarcodePacker};
 use color_multiplexer::ColorMultiplexer;
+use file_decoder::FileDecoder;
+use glob::glob;
+use std::sync::Arc;
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {
@@ -169,6 +176,7 @@ fn main() {
             // This is almost always only going to be possible when the document itself can very easily fit on a single page.
             let mut start_offset: u64 = 0;
             let total_len = file_reader.stream_len();
+            println!("Total file length: {}", total_len);
             let max_block_size = barcode_packer.data_bytes_per_page() as u64;
             let total_pages_at_max_data_rate = ((total_len + (max_block_size - 1)) / max_block_size) as u16; // See https://www.reddit.com/r/rust/comments/bk7v15/my_next_favourite_way_to_divide_integers_rounding/
             let min_bytes_per_page = ((total_len + (total_pages_at_max_data_rate as u64 - 1)) / (total_pages_at_max_data_rate as u64)) as u32; // Redividing this so we can round properly.
@@ -221,6 +229,20 @@ fn main() {
         else {
             // Decode normal data.
             let out_file = matches.value_of("output").unwrap();
+            let mut file_writer = OutputFileWriter::new(out_file).finalize();
+            let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
+            let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
+            for f in in_files_glob {
+                match f {
+                    Ok(filename) => {
+                        println!("Decoding file {}", filename.to_str().unwrap());
+                        let mut one_in_file = ArchiveHumanInputFile::new(filename.to_str().unwrap(), format);
+                        let mut decoder = FileDecoder::new(&mut one_in_file, &color_multiplexer).finalize();
+                        decoder.decode(&mut file_writer);
+                    },
+                    Err(e) => println!("{:?}", e)
+                }
+            }
         }
     }
 }

@@ -40,7 +40,9 @@ Barcodes should be able to be read independently of the rest of the document.  T
 
 TODO: Figure out how to do on-page parity as well, so pages can contain both data and parity.  This would allow for short documents to be single-page and still include parity, and would also add an extra level of durability and validation against damage.
 
-Each barcode is encoded as follows (nominally 20 bytes wasted per barcode when using version 1):
+Barcode binary data is encoded using base-45 encoding (see IETF RFC 9385) so we can use alphanumeric mode in our barcodes.  This may come at a slight density cost, but encoding/decoding support for raw binary mode is not great.
+
+Within the base-45 encoding, the binary data for each barcode is encoded as follows (nominally 20 bytes wasted per barcode when using version 1):
 Format version: encoded similarly to UTF-8 - at this time, the high bit is reserved for this for later use and we can assume the version will be one byte for quite a few versions.
 Page number: 16-bit big endian unsigned integer.  More compact than storing "bytes per page" and can be used to easily make user interfaces for partial scanning or recovering missing pages.  Total page counts include the parity pages.  Page numbers are 1-based so the data representation matches what's displayed to the user and optionally shown in printable page metadata.  We don't really need this for reconstruction - from a functional perspective, it's purely so we can show the user which pages we've read and can keep track of which ones are missing.
 Barcode number on page: 16-bit big endian unsigned integer/bitfield (required so we can recover from barcodes out of order or some barcodes unrecoverable):

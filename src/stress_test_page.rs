@@ -6,9 +6,9 @@ use image::{RgbImage, Rgb};
 use image::imageops;
 use imageproc::rect::Rect;
 use imageproc::drawing::*;
-use qrcode::QrCode;
-use qrcode::bits::Bits;
-use qrcode::types::{Version, EcLevel, Mode};
+use qrencode::QrCode;
+use qrencode::bits::Bits;
+use qrencode::types::{Version, EcLevel, Mode};
 
 pub struct StressTestPage {
 }
@@ -126,7 +126,7 @@ impl<'a> StressTestPage {
             // Generate the QR code.
             let code = QrCode::with_bits(bits, ec_level).unwrap();
             let code_image = code.render::<Rgb<u8>>().module_dimensions(1 << y, 1 << y).quiet_zone(false).build();
-            imageops::overlay(&mut out_image, &code_image, x, ((y * large_barcode_height) as u32) + quiet_zone);
+            imageops::overlay(&mut out_image, &code_image, x, (((y * large_barcode_height) as u32) + quiet_zone) as i64);
         }
 
         // Now do one for color.
@@ -150,7 +150,7 @@ impl<'a> StressTestPage {
                 code.render::<Rgb<u8>>().module_dimensions(1 << y, 1 << y).quiet_zone(false).build()
             }).collect::<Vec<RgbImage>>();
             let code_image = StressTestPage::multiplex_barcodes_into_image(color_barcodes, &colors);
-            imageops::overlay(&mut out_image, &code_image, x, ((y * large_barcode_height) as u32) + quiet_zone);
+            imageops::overlay(&mut out_image, &code_image, x as i64, (((y * large_barcode_height) as u32) + quiet_zone) as i64);
         }
 
         // Feed it to the writer.
