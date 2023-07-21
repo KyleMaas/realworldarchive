@@ -295,14 +295,14 @@ impl<'a> PageBarcodePacker {
                 if overhead != 20 {
                     panic!("Something went wrong with the format generator - got {} bytes when it should be 20", overhead);
                 }
-                let data_capacity = (b_info.capacity_per_color_plane as usize) - overhead;
+                let data_capacity = b_info.capacity_per_color_plane as usize;
 
                 let mut v: Vec<u8>;
                 let barcode_slice: &[u8];
                 //println!("Data length: {}", data.len());
                 if (start_offset + data_capacity) < data.len() {
                     // We can pull a full slice.
-                    println!("Full data slice");
+                    println!("Full data slice - data capacity {} vs length {}", data_capacity, data.len());
                     barcode_slice = &data[start_offset..(start_offset + data_capacity)];
                 }
                 else if start_offset < data.len() {
@@ -321,6 +321,7 @@ impl<'a> PageBarcodePacker {
                 //println!("Data to encode: {:?}", barcode_slice);
                 barcode_data.extend_from_slice(barcode_slice);
                 println!("Data to encode: {:?}", barcode_data);
+                println!("Starting offset {}, advancing {}", start_offset, data_capacity);
 
                 color_planes.push(self.render_barcode(&b_info, &barcode_data));
 
@@ -332,6 +333,11 @@ impl<'a> PageBarcodePacker {
             let code_image = self.color_multiplexer.multiplex_planes(color_planes);
 
             imageops::overlay(out_image, &code_image, b_info.x as i64, b_info.y as i64);
+        }
+
+        // Final check to make sure we didn't miss anything.
+        if start_offset < data.len() {
+            panic!("Couldn't encode entire buffer with length {} - some data skipped.", data.len());
         }
     }
 }

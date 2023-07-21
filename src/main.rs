@@ -243,6 +243,7 @@ fn main() {
                     Err(e) => println!("{:?}", e)
                 }
             }
+            println!("Decoded using {} color planes", color_multiplexer.num_planes());
         }
     }
 }
