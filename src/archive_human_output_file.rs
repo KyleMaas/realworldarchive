@@ -86,9 +86,17 @@ impl<'a> ArchiveHumanOutputFile<'a> {
         self
     }
 
+    pub fn set_document_footer(&mut self, footer: &'a str) {
+        self.document_footer = footer;
+    }
+
     pub fn total_pages(mut self, pages: u16) -> Self {
         self.total_pages = pages;
         self
+    }
+
+    pub fn set_total_pages(&mut self, pages: u16) {
+        self.total_pages = pages;
     }
 
     pub fn finalize(self) -> ArchiveHumanOutputFile<'a> {
@@ -171,6 +179,8 @@ impl<'a> ArchiveHumanOutputFile<'a> {
         }
 
         // Save it out.
-        out_image.save(self.out_file).unwrap();
+        let numbered_filename = format!("{}{}.png", self.out_file, page_num);
+        println!("Writing to {}", numbered_filename);
+        out_image.save(numbered_filename).unwrap();
     }
 }

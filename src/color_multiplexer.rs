@@ -79,6 +79,10 @@ impl<'a> ColorMultiplexer {
         self.colors_rgb.len().ilog2() as u8
     }
 
+    pub fn num_colors(&self) -> u8 {
+        self.colors_rgb.len() as u8
+    }
+
     pub fn multiplex_planes(&self, p: Vec<RgbImage>) -> RgbImage {
         if p.len() != self.num_planes() as usize {
             panic!("Wrong number of color planes to multiplex");

@@ -161,11 +161,15 @@ fn main() {
             let mut file_reader = InputFileReader::new(in_file).finalize();
             let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
             let header = in_file;
-            let writer = ArchiveHumanOutputFile::new(out_file, format)
+            let mut writer = ArchiveHumanOutputFile::new(out_file, format)
                 .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
                 .dpi(dpi.parse::<u16>().unwrap())
                 .document_header(&header)
+                .document_footer("Page {{page_num}}/{{total_pages}}")
                 .finalize();
+            if color_multiplexer.num_colors() > 2 {
+                writer.set_document_footer("Page {{page_num}}/{{total_pages}} - {{total_overlay_colors}} Colors");
+            }
             let (w, h) = writer.get_barcode_image_size();
             let mut barcode_packer = PageBarcodePacker::new(w, h, BarcodeFormat::QR)
                 .color_multiplexer(color_multiplexer)
@@ -187,6 +191,8 @@ fn main() {
             let mut out_image = RgbImage::new(w, h);
             println!("Checking for data bytes per page");
             let block_size = barcode_packer.data_bytes_per_page() as u64;
+            let total_pages = ((total_len + (block_size - 1)) / block_size) as u16;
+            writer.set_total_pages(total_pages);
             println!("Block size: {}", block_size);
             let mut block_buffer_vec: Vec<u8> = vec![];
             for _b in 0..block_size {
@@ -208,9 +214,10 @@ fn main() {
                 }
                 //let last_page = page_number == total_pages;
                 barcode_packer.encode(&mut out_image, page_number, false, 0, file_checksum, start_offset, total_len, block_buffer);
-                let numbered_filename = format!("{}{}.png", out_file, page_number);
-                println!("Writing to {}", numbered_filename);
-                out_image.save(numbered_filename).unwrap();
+                //let numbered_filename = format!("{}{}.png", out_file, page_number);
+                //println!("Writing to {}", numbered_filename);
+                writer.write_page(&out_image, page_number);
+                //out_image.save(numbered_filename).unwrap();
                 start_offset += block_size;
             }
         }
