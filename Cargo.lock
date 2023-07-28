@@ -66,9 +66,8 @@ checksum = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 
 [[package]]
 name = "bardecoder"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ed58c29e13b3bd8044ec5463831fbcbada218198c91ea800d4f3935ff92f1c"
+version = "0.4.0"
+source = "git+https://github.com/piderman314/bardecoder.git?rev=27b27db#27b27db1fb21473fa0e74da957a9116c707554a4"
 dependencies = [
  "anyhow",
  "image",

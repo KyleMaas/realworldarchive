@@ -39,6 +39,10 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
         imageops::overlay(&mut new_image, &image_chunk.to_image(), quiet_zone as i64, quiet_zone as i64);
 
         let results = decoder.decode(&new_image); //&(DynamicImage::ImageRgba8(image_chunk.to_image())));
+
+        // Once https://github.com/piderman314/bardecoder/issues/50 is resolved, the lines above can be replaced with:
+        //let results = decoder.decode(&*image_chunk);
+        
         println!("Done decoding - found {} results", results.len());
         for result in results {
             match result {
