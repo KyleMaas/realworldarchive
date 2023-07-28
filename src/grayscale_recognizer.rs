@@ -34,14 +34,14 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
         let image_chunk = sized_up.view(x, y, w, h);
 
         // Add a large white border around the chunk to work around https://github.com/piderman314/bardecoder/issues/50
-        let mut new_image = DynamicImage::new_rgb8(decode_block_size + quiet_zone * 2, decode_block_size + quiet_zone * 2);
+        /*let mut new_image = DynamicImage::new_rgb8(decode_block_size + quiet_zone * 2, decode_block_size + quiet_zone * 2);
         draw_filled_rect_mut(&mut new_image, Rect::at(0, 0).of_size(decode_block_size + quiet_zone * 2, decode_block_size + quiet_zone * 2), Rgba([255, 255, 255, 0]));
         imageops::overlay(&mut new_image, &image_chunk.to_image(), quiet_zone as i64, quiet_zone as i64);
 
-        let results = decoder.decode(&new_image); //&(DynamicImage::ImageRgba8(image_chunk.to_image())));
+        let results = decoder.decode(&new_image); //&(DynamicImage::ImageRgba8(image_chunk.to_image())));*/
 
         // Once https://github.com/piderman314/bardecoder/issues/50 is resolved, the lines above can be replaced with:
-        //let results = decoder.decode(&*image_chunk);
+        let results = decoder.decode(&*image_chunk);
         
         println!("Done decoding - found {} results", results.len());
         for result in results {
