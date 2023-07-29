@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use crate::archive_human_input_file::*;
 
 pub struct PageOrganizer<'a> {

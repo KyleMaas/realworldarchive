@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use crate::archive_human_output_file::*;
 use OutputFormat;
 use image::DynamicImage;

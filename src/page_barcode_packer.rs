@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use image::Rgb;
 use image::imageops;
 use qrencode::QrCode;

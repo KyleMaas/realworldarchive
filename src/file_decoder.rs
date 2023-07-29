@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use crate::archive_human_input_file::*;
 use crate::output_file_writer::*;
 use crate::color_multiplexer::ColorMultiplexer;

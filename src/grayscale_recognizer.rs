@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use image::{DynamicImage, GenericImageView};
 use image::imageops::FilterType;
 //use rqrr::PreparedImage;

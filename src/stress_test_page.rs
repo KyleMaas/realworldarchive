@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use crate::archive_human_output_file::*;
 use crate::archive_human_input_file::*;
 use crate::grayscale_recognizer::recognize_grayscale_barcodes;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
+
 use std::fs::File;
 use positioned_io::WriteAt;
 
