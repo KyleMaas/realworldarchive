@@ -13,8 +13,7 @@ qrencode = "0.14.0"
 # bardecoder = "0.2.1"
 # bardecoder = { version = "0.2.2", path = "../bardecoder", features = [ ] }
 # bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2" }
-#bardecoder = "0.4.2"
-bardecoder = { git = 'https://github.com/piderman314/bardecoder.git', rev = "27b27db"}
+bardecoder = "0.5.0"
 reed-solomon = "0.2.1"
 clap = "2.33.0"
 image = "0.24.6"
