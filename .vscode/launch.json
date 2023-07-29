@@ -35,7 +35,7 @@
                 }
             ]*/
             "env": {
-                "RUST_LOG": "debug,info,warn,error,bardecoder=debug",
+                "RUST_LOG": "none,realworldarchive=debug,info,warn,error",
                 "RUST_BACKTRACE": "1",
             },
         }

@@ -6,23 +6,20 @@ use crate::color_multiplexer::ColorMultiplexer;
 use crate::grayscale_recognizer::recognize_grayscale_barcodes;
 use base45::decode;
 
-pub struct FileDecoder<'a, 'b> {
-    file_reader: &'a mut ArchiveHumanInputFile<'a>,
-    color_multiplexer: &'b ColorMultiplexer
+pub struct FileDecoder<'a> {
+    file_reader: &'a mut ArchiveHumanInputFile<'a>
 }
 
-impl<'a, 'b> FileDecoder<'a, 'b> {
-    pub fn new(file_reader: &'a mut ArchiveHumanInputFile<'a>, color_multiplexer: &'b ColorMultiplexer) -> FileDecoder<'a, 'b> {
+impl<'a, 'b> FileDecoder<'a> {
+    pub fn new(file_reader: &'a mut ArchiveHumanInputFile<'a>) -> FileDecoder<'a> {
         FileDecoder {
-            file_reader: file_reader,
-            color_multiplexer: color_multiplexer
+            file_reader: file_reader
         }
     }
 
-    pub fn finalize(self) -> FileDecoder<'a, 'b> {
+    pub fn finalize(self) -> FileDecoder<'a> {
         FileDecoder {
-            file_reader: self.file_reader,
-            color_multiplexer: self.color_multiplexer
+            file_reader: self.file_reader
         }
     }
 
@@ -67,10 +64,13 @@ impl<'a, 'b> FileDecoder<'a, 'b> {
         }
     }
 
-    pub fn decode(&mut self, file_writer: &mut OutputFileWriter) {
+    pub fn decode(&mut self, file_writer: &mut OutputFileWriter, color_multiplexer: &mut ColorMultiplexer, adjust_colors: bool) {
         // Just doing this once for now.
         let page_image = self.file_reader.read_page().unwrap();
-        let demuxed_images = self.color_multiplexer.demultiplex_image(&page_image);
+        if adjust_colors {
+            color_multiplexer.palettize_from_image(&page_image);
+        }
+        let demuxed_images = color_multiplexer.demultiplex_image(&page_image);
         for d in demuxed_images {
             let chunks = recognize_grayscale_barcodes(&d);
             for c in chunks {

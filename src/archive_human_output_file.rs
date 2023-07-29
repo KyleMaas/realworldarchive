@@ -38,14 +38,14 @@ impl<'a> ArchiveHumanOutputFile<'a> {
     pub fn new(out_file: &'a str, format: OutputFormat) -> ArchiveHumanOutputFile<'a> {
         //let increment_per_color = 320.0 / 6.0; // We're going to exclude the far end of the range, since it doesn't print well and turns out as red.
         let colors_hsl = [
-            HSL{h: 0.0, s: 0.0, l:0.0},
-            HSL{h: 0.0, s: 0.0, l:1.0},
+            HSL{h: 0.0, s: 0.0, l:0.0}, // Black
             HSL{h: 0.0, s: 1.0, l:0.5}, // Red
             HSL{h: 35.0, s: 1.0, l:0.5}, // Orange
             HSL{h: 60.0, s: 1.0, l:0.5}, // Yellow
             HSL{h: 120.0, s: 1.0, l:0.5}, // Green
             HSL{h: 200.0, s: 1.0, l:0.5}, // Blue
-            HSL{h: 270.0, s: 1.0, l:0.6} // Violet
+            HSL{h: 270.0, s: 1.0, l:0.6}, // Violet
+            HSL{h: 0.0, s: 0.0, l:1.0} // White
         ];
         ArchiveHumanOutputFile {
             document_header: "Real World Archive",
@@ -75,6 +75,11 @@ impl<'a> ArchiveHumanOutputFile<'a> {
 
     pub fn dpi(mut self, dpi: u16) -> Self {
         self.dpi = dpi;
+        self
+    }
+
+    pub fn colors(mut self, colors: &Vec<Rgb<u8>>) -> Self {
+        self.colors = colors.to_vec();
         self
     }
 
@@ -176,7 +181,7 @@ impl<'a> ArchiveHumanOutputFile<'a> {
             let palette_border = 4;
             draw_filled_rect_mut(&mut out_image, Rect::at(palette_left as i32, palette_top as i32).of_size(palette_width, palette_height), Rgb([0, 0, 0]));
             for c in 0..(self.colors.len() - 2) {
-                draw_filled_rect_mut(&mut out_image, Rect::at((palette_left + (c as u32 * palette_height) + palette_border) as i32, (palette_top + palette_border) as i32).of_size(palette_height - palette_border * 2, palette_height - palette_border * 2), self.colors[c + 2]);
+                draw_filled_rect_mut(&mut out_image, Rect::at((palette_left + (c as u32 * palette_height) + palette_border) as i32, (palette_top + palette_border) as i32).of_size(palette_height - palette_border * 2, palette_height - palette_border * 2), self.colors[c + 1]);
             }
         }
 

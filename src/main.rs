@@ -168,6 +168,7 @@ fn main() {
                 .dpi(dpi.parse::<u16>().unwrap())
                 .document_header(&header)
                 .document_footer("Page {{page_num}}/{{total_pages}}")
+                .colors(color_multiplexer.get_rgb())
                 .finalize();
             if color_multiplexer.num_colors() > 2 {
                 writer.set_document_footer("Page {{page_num}}/{{total_pages}} - {{total_overlay_colors}} Colors");
@@ -239,15 +240,19 @@ fn main() {
             // Decode normal data.
             let out_file = matches.value_of("output").unwrap();
             let mut file_writer = OutputFileWriter::new(out_file).finalize();
-            let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
+            let mut color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
             let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
+            let mut first_file = true;
             for f in in_files_glob {
                 match f {
                     Ok(filename) => {
                         println!("Decoding file {}", filename.to_str().unwrap());
                         let mut one_in_file = ArchiveHumanInputFile::new(filename.to_str().unwrap(), format);
-                        let mut decoder = FileDecoder::new(&mut one_in_file, &color_multiplexer).finalize();
-                        decoder.decode(&mut file_writer);
+                        let mut decoder = FileDecoder::new(&mut one_in_file).finalize();
+
+                        // If it's the first page, go ahead and re-palettize the color multiplexer based on the colors found in it, to account for color distortion in the printing/scanning process.
+                        decoder.decode(&mut file_writer, &mut color_multiplexer, first_file);
+                        first_file = false;
                     },
                     Err(e) => println!("{:?}", e)
                 }

@@ -8,32 +8,20 @@ use image::GenericImage;
 use image::GenericImageView;
 use gray_codes::GrayCode8;
 use hsl::HSL;
+use palette::cast;
+use palette::{white_point::D65, FromColor, IntoColor, Lab, Srgb};
+use kmeans_colors::{get_kmeans, Calculate, Kmeans, MapColor, Sort};
 
 pub struct ColorMultiplexer {
     colors_rgb: Vec<Rgb<u8>>,
     colors_hsl: Vec<HSL>
 }
 
-fn generate_palette(num_colors_unrounded: u8) -> (Vec<Rgb<u8>>, Vec<HSL>) {
-    if num_colors_unrounded == 2 {
-        return (vec![Rgb([0, 0, 0]), Rgb([255, 255, 255])], vec![HSL { h: 0.0, s: 0.0, l: 0.0 }, HSL { h: 0.0, s: 0.0, l: 1.0 }]);
-    }
-    println!("Number of colors: {}", num_colors_unrounded);
-    let num_colors = (2 as u8).pow(num_colors_unrounded.ilog2());
-    println!("Number of colors rounded: {}", num_colors);
-    let gray_codes = GrayCode8::with_bits(num_colors.ilog2() as usize).collect::<Vec<u8>>();
-    let mut colors_rgb = vec![Rgb([0, 0, 0])];
-    let mut colors_hsl = vec![HSL { h: 0.0, s: 0.0, l: 0.0 }];
-    for c in 0..(num_colors - 1) {
-        let angle = (c as f64) / (num_colors as f64) * 360.0;
-        let hsl = HSL { h: angle, s: 1.0, l: 0.5 };
-        let (r, g, b) = hsl.to_rgb();
-        colors_rgb.push(Rgb([r, g, b]));
-        colors_hsl.push(hsl);
-    }
-
+fn reorder_by_gray_code(num_colors: u8, colors_rgb: Vec<Rgb<u8>>, colors_hsl: Vec<HSL>) -> (Vec<Rgb<u8>>, Vec<HSL>) {
+    // We're now assuming that the last color in the list is white.
     // Put them in Gray code order.
     println!("Number of colors: {}", num_colors);
+    let gray_codes = GrayCode8::with_bits(num_colors.ilog2() as usize).collect::<Vec<u8>>();
     let mut gray_code_order_rgb: Vec<Rgb<u8>> = Vec::with_capacity(num_colors as usize);
     let mut gray_code_order_hsl: Vec<HSL> = Vec::with_capacity(num_colors as usize);
     for _i in 0..num_colors {
@@ -43,22 +31,45 @@ fn generate_palette(num_colors_unrounded: u8) -> (Vec<Rgb<u8>>, Vec<HSL>) {
     let mut white_index = num_colors as usize - 1;
     for (i, g) in gray_codes.iter().enumerate() {
         let gray_code = *g as usize;
-        if gray_code >= colors_rgb.len() {
+        if gray_code >= colors_rgb.len() - 1 {
             white_index = i;
         }
-        else {
-            gray_code_order_rgb[i] = colors_rgb[gray_code];
-            gray_code_order_hsl[i] = colors_hsl[gray_code];
-        }
+        gray_code_order_rgb[i] = colors_rgb[gray_code];
+        gray_code_order_hsl[i] = colors_hsl[gray_code];
     }
 
     // Remove white from its original order and place it at the end.
-    gray_code_order_rgb.remove(white_index);
-    gray_code_order_hsl.remove(white_index);
-    gray_code_order_rgb.push(Rgb([255, 255, 255]));
-    gray_code_order_hsl.push(HSL { h: 0.0, s: 0.0, l: 1.0 });
+    // This may not be true white, but it's the whitest color we have from the incoming palette.
+    let white_rgb = gray_code_order_rgb.remove(white_index);
+    let white_hsl = gray_code_order_hsl.remove(white_index);
+    gray_code_order_rgb.push(white_rgb);
+    gray_code_order_hsl.push(white_hsl);
 
     return (gray_code_order_rgb, gray_code_order_hsl);
+}
+
+fn generate_palette(num_colors_unrounded: u8) -> (Vec<Rgb<u8>>, Vec<HSL>) {
+    if num_colors_unrounded == 2 {
+        return (vec![Rgb([0, 0, 0]), Rgb([255, 255, 255])], vec![HSL { h: 0.0, s: 0.0, l: 0.0 }, HSL { h: 0.0, s: 0.0, l: 1.0 }]);
+    }
+    println!("Number of colors: {}", num_colors_unrounded);
+    let num_colors = (2 as u8).pow(num_colors_unrounded.ilog2());
+    println!("Number of colors rounded: {}", num_colors);
+    let mut colors_rgb = vec![Rgb([0, 0, 0])];
+    let mut colors_hsl = vec![HSL { h: 0.0, s: 0.0, l: 0.0 }];
+    for c in 0..(num_colors - 2) {
+        let angle = (c as f64) / ((num_colors - 2) as f64) * 360.0;
+        let hsl = HSL { h: angle, s: 1.0, l: 0.5 };
+        let (r, g, b) = hsl.to_rgb();
+        colors_rgb.push(Rgb([r, g, b]));
+        colors_hsl.push(hsl);
+    }
+
+    // Add white at the end.
+    colors_rgb.push(Rgb([255, 255, 255]));
+    colors_hsl.push(HSL { h: 0.0, s: 0.0, l: 1.0 });
+
+    reorder_by_gray_code(num_colors, colors_rgb, colors_hsl)
 }
 
 impl<'a> ColorMultiplexer {
@@ -83,6 +94,99 @@ impl<'a> ColorMultiplexer {
 
     pub fn num_colors(&self) -> u8 {
         self.colors_rgb.len() as u8
+    }
+
+    pub fn get_rgb(&self) -> &Vec<Rgb<u8>> {
+        &self.colors_rgb
+    }
+
+    pub fn palettize_from_image(&mut self, img: &DynamicImage) {
+        println!("Repalettizing from {:?}", self.colors_rgb);
+
+        let num_colors = self.num_colors();
+        if num_colors <= 2 {
+            // It's monochrome - there's no need to repalettize.
+            return;
+        }
+
+        // Find the most dominant colors in the image.
+        // We only really want the palette sample in the bottom right corner, ignoring the antialiased lettering.
+        let image_chunk = img.view(img.width() / 2, img.height() / 2, img.width() / 2, img.height() / 2).to_image();
+        let pixels: Vec<Lab<D65, f32>> = cast::from_component_slice::<Srgb<u8>>(image_chunk.as_raw()).iter().map(|x| x.into_format().into_color()).collect();
+        let mut result = Kmeans::new();
+        for i in 0..4 {
+            let run_result = get_kmeans(
+                num_colors as usize,
+                8, // Default for the CLI version, per https://github.com/okaneco/kmeans-colors/issues/50#issuecomment-1073156666
+                0.0025, // Recommended in https://github.com/okaneco/kmeans-colors/issues/50#issuecomment-1073156666
+                false,
+                &pixels,
+                i * 6972593 as u64
+            );
+            if run_result.score < result.score {
+                result = run_result;
+            }
+        }
+
+        // Convert colors to Srgb and then to HSL.
+        let rgb = &result.centroids.iter().map(|x| Srgb::from_color(*x).into_format()).collect::<Vec<Srgb<u8>>>();
+        let mut colors_rgb: Vec<Rgb<u8>> = vec![];
+        let mut colors_hsl: Vec<HSL> = vec![];
+        for c in rgb {
+            let r = c.red;
+            let g = c.green;
+            let b = c.blue;
+            colors_rgb.push(Rgb([r, g, b]));
+            colors_hsl.push(HSL::from_rgb(&[r, g, b]));
+        }
+
+        // Sort the colors by HSL hue, putting the darkest color (which we'll treat as black) at the start and the lightest color (which we'll treat as white) at the end.
+        // Bubble sort for simplicity.
+        for i in 0..colors_hsl.len() - 1 {
+            for j in (i + 1)..colors_hsl.len() {
+                if colors_hsl[j].h < colors_hsl[i].h {
+                    let temp_hsl = colors_hsl[i];
+                    colors_hsl[i] = colors_hsl[j];
+                    colors_hsl[j] = temp_hsl;
+
+                    let temp_rgb = colors_rgb[i];
+                    colors_rgb[i] = colors_rgb[j];
+                    colors_rgb[j] = temp_rgb;
+                }
+            }
+        }
+        // Search for black.
+        let mut darkest_color_index = 0;
+        for c in 0..colors_hsl.len() {
+            if colors_hsl[c].l < colors_hsl[darkest_color_index].l {
+                darkest_color_index = c;
+            }
+        }
+        let dark_hsl = colors_hsl.remove(darkest_color_index);
+        let dark_rgb = colors_rgb.remove(darkest_color_index);
+        colors_hsl.insert(0, dark_hsl);
+        colors_rgb.insert(0, dark_rgb);
+        println!("Colors after reordering black {:?}", colors_rgb);
+
+        // Search for white.
+        let mut lightest_color_index = colors_hsl.len() - 1;
+        for c in 0..colors_hsl.len() {
+            if colors_hsl[c].l > colors_hsl[lightest_color_index].l {
+                lightest_color_index = c;
+            }
+        }
+        let light_hsl = colors_hsl.remove(lightest_color_index);
+        let light_rgb = colors_rgb.remove(lightest_color_index);
+        colors_hsl.push(light_hsl);
+        colors_rgb.push(light_rgb);
+        println!("Colors after reordering white {:?}", colors_rgb);
+
+        // Reorder by Gray code.
+        (self.colors_rgb, self.colors_hsl) = reorder_by_gray_code(num_colors, colors_rgb, colors_hsl);
+
+        println!("Repalettized to {:?}", self.colors_rgb);
+
+        //panic!("Stopping for now");
     }
 
     pub fn multiplex_planes(&self, p: Vec<RgbImage>) -> RgbImage {

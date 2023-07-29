@@ -49,8 +49,8 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
         for result in results {
             match result {
                 Result::Ok(r) => recognized_fragments.push(r.as_bytes().to_vec()),
-                Result::Err(e) => println!("Error in QR code results: {}", e),
-                //Result::Err(_e) => { /* Ignore errors, because there will be a lot of them */} //println!("Error in QR code results: {}", e),
+                //Result::Err(e) => println!("Error in QR code results: {}", e),
+                Result::Err(_e) => { /* Ignore errors, because there will be a lot of them */} //println!("Error in QR code results: {}", e),
             }
         }
         x += decode_block_size / 2;
