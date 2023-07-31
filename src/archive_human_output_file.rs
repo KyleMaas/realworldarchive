@@ -174,14 +174,21 @@ impl<'a> ArchiveHumanOutputFile<'a> {
 
         // Add the color palette, but only if we're actually using colors.
         if self.colors.len() > 2 {
+            let max_colors_per_row = 16;
+            let colors_except_bw = self.colors.len() as u32 - 2;
+            let rows = ((colors_except_bw - 1) as u32 / max_colors_per_row) + 1;
+            let colors_per_row = (colors_except_bw + rows - 1) / rows; // colors_except_bw / rows, rounding up
             let palette_top = footer_top;
-            let palette_width = (((self.colors.len() - 2) as f32 * self.text_height) * dpi_float) as u32;
-            let palette_left = page_width_pixels - ((self.margins.right * dpi_float) as u32) - palette_width;
             let palette_height = (self.text_height * dpi_float) as u32;
-            let palette_border = 4;
+            let swatch_size = palette_height / rows;
+            let palette_width = colors_per_row * swatch_size;
+            let palette_left = page_width_pixels - ((self.margins.right * dpi_float) as u32) - palette_width;
+            let palette_border = swatch_size / 4;
             draw_filled_rect_mut(&mut out_image, Rect::at(palette_left as i32, palette_top as i32).of_size(palette_width, palette_height), Rgb([0, 0, 0]));
             for c in 0..(self.colors.len() - 2) {
-                draw_filled_rect_mut(&mut out_image, Rect::at((palette_left + (c as u32 * palette_height) + palette_border) as i32, (palette_top + palette_border) as i32).of_size(palette_height - palette_border * 2, palette_height - palette_border * 2), self.colors[c + 1]);
+                let x = (palette_left + ((c as u32 % colors_per_row) * swatch_size) + palette_border) as i32;
+                let y = (palette_top + (c as u32 / colors_per_row) * swatch_size + palette_border) as i32;
+                draw_filled_rect_mut(&mut out_image, Rect::at(x, y).of_size(swatch_size - palette_border * 2, swatch_size - palette_border * 2), self.colors[c + 1]);
             }
         }
 
