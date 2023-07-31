@@ -10,7 +10,8 @@ use gray_codes::GrayCode8;
 use hsl::HSL;
 use palette::cast;
 use palette::{white_point::D65, FromColor, IntoColor, Lab, Srgb};
-use kmeans_colors::{get_kmeans, Calculate, Kmeans, MapColor, Sort};
+use kmeans_colors::{get_kmeans_hamerly, Calculate, Kmeans, MapColor, Sort};
+use std::collections::HashSet;
 
 pub struct ColorMultiplexer {
     colors_rgb: Vec<Rgb<u8>>,
@@ -59,7 +60,14 @@ fn generate_palette(num_colors_unrounded: u8) -> (Vec<Rgb<u8>>, Vec<HSL>) {
     let mut colors_hsl = vec![HSL { h: 0.0, s: 0.0, l: 0.0 }];
     for c in 0..(num_colors - 2) {
         let angle = (c as f64) / ((num_colors - 2) as f64) * 360.0;
-        let hsl = HSL { h: angle, s: 1.0, l: 0.5 };
+        let mut l = 0.5;
+        if num_colors > 8 {
+            // Alternate between darker and lighter colors to make repalettizing them later easier.
+            let base = 0.6;
+            let offset = 0.1;
+            l = base + if (c % 2) == 0 { offset } else { -offset };
+        }
+        let hsl = HSL { h: angle, s: 1.0, l: l };
         let (r, g, b) = hsl.to_rgb();
         colors_rgb.push(Rgb([r, g, b]));
         colors_hsl.push(hsl);
@@ -111,17 +119,37 @@ impl<'a> ColorMultiplexer {
 
         // Find the most dominant colors in the image.
         // We only really want the palette sample in the bottom right corner, ignoring the antialiased lettering.
-        let image_chunk = img.view(img.width() / 2, img.height() / 2, img.width() / 2, img.height() / 2).to_image();
-        let pixels: Vec<Lab<D65, f32>> = cast::from_component_slice::<Srgb<u8>>(image_chunk.as_raw()).iter().map(|x| x.into_format().into_color()).collect();
+        let image_chunk = img.view(img.width() / 2, img.height() / 8 * 7, img.width() / 2, img.height() / 8).to_image();
+        //image_chunk.save("test_out/palettediagnostic.png").unwrap();
+        /*let img_vec = image_chunk.as_raw();
+        let pixels: Vec<Srgb> = cast::from_component_slice::<Srgb<u8>>(img_vec)
+            .iter()
+            .map(|x| x.into_format::<f32>().into_color())
+            .collect();*/
+        // Have to do this differently than the reference code because of differences in color byte order (GBR or something like that instead of RGB) messing things up massively.
+        let pixels: Vec<Srgb> = image_chunk.pixels()
+            .map(|x| Srgb::new(x[0] as f32 / 255.0, x[1] as f32 / 255.0, x[2] as f32 / 255.0))
+            .collect();
+        /*for i in 0..pixels.len() {
+            if pixels[i].red > 0.5 && pixels[i].red < 0.9 {
+                println!("Pixel: {}, {}, {}", (pixels[i].red * 255.0) as u8, (pixels[i].green * 255.0) as u8, (pixels[i].blue * 255.0) as u8);
+                break;
+            }
+        }*/
+        //println!("Pixel colors: {:?}", pixels);
+        /*let mut pixels: Vec<Srgb> = vec![];
+        for i in (0..img_vec.len()).step_by(3) {
+            pixels.push(Srgb::new(img_vec[i] as f32 / 255.0, img_vec[i + 1] as f32 / 255.0, img_vec[i + 2] as f32 / 255.0));
+        }*/
         let mut result = Kmeans::new();
         for i in 0..4 {
-            let run_result = get_kmeans(
+            let run_result = get_kmeans_hamerly(
                 num_colors as usize,
                 8, // Default for the CLI version, per https://github.com/okaneco/kmeans-colors/issues/50#issuecomment-1073156666
                 0.0025, // Recommended in https://github.com/okaneco/kmeans-colors/issues/50#issuecomment-1073156666
                 false,
                 &pixels,
-                i * 6972593 as u64
+                6972593 + i as u64
             );
             if run_result.score < result.score {
                 result = run_result;
@@ -129,16 +157,17 @@ impl<'a> ColorMultiplexer {
         }
 
         // Convert colors to Srgb and then to HSL.
-        let rgb = &result.centroids.iter().map(|x| Srgb::from_color(*x).into_format()).collect::<Vec<Srgb<u8>>>();
         let mut colors_rgb: Vec<Rgb<u8>> = vec![];
         let mut colors_hsl: Vec<HSL> = vec![];
-        for c in rgb {
-            let r = c.red;
-            let g = c.green;
-            let b = c.blue;
+        //println!("Original colors: {:?}", result.centroids);
+        for c in result.centroids {
+            let r = (c.red * 255.0) as u8;
+            let g = (c.green * 255.0) as u8;
+            let b = (c.blue * 255.0) as u8;
             colors_rgb.push(Rgb([r, g, b]));
             colors_hsl.push(HSL::from_rgb(&[r, g, b]));
         }
+        //println!("Remapped colors: {:?}", colors_rgb);
 
         // Sort the colors by HSL hue, putting the darkest color (which we'll treat as black) at the start and the lightest color (which we'll treat as white) at the end.
         // Bubble sort for simplicity.
@@ -166,7 +195,7 @@ impl<'a> ColorMultiplexer {
         let dark_rgb = colors_rgb.remove(darkest_color_index);
         colors_hsl.insert(0, dark_hsl);
         colors_rgb.insert(0, dark_rgb);
-        println!("Colors after reordering black {:?}", colors_rgb);
+        //println!("Colors after reordering black {:?}", colors_rgb);
 
         // Search for white.
         let mut lightest_color_index = colors_hsl.len() - 1;
@@ -179,7 +208,7 @@ impl<'a> ColorMultiplexer {
         let light_rgb = colors_rgb.remove(lightest_color_index);
         colors_hsl.push(light_hsl);
         colors_rgb.push(light_rgb);
-        println!("Colors after reordering white {:?}", colors_rgb);
+        //println!("Colors after reordering white {:?}", colors_rgb);
 
         // Reorder by Gray code.
         (self.colors_rgb, self.colors_hsl) = reorder_by_gray_code(num_colors, colors_rgb, colors_hsl);
