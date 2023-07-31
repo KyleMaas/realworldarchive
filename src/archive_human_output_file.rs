@@ -174,16 +174,35 @@ impl<'a> ArchiveHumanOutputFile<'a> {
 
         // Add the color palette, but only if we're actually using colors.
         if self.colors.len() > 2 {
-            let max_colors_per_row = 16;
+            let max_palette_width = (page_width_pixels - ((self.margins.left * dpi_float) as u32) - ((self.margins.right * dpi_float) as u32)) / 2;
             let colors_except_bw = self.colors.len() as u32 - 2;
-            let rows = ((colors_except_bw - 1) as u32 / max_colors_per_row) + 1;
-            let colors_per_row = (colors_except_bw + rows - 1) / rows; // colors_except_bw / rows, rounding up
-            let palette_top = footer_top;
-            let palette_height = (self.text_height * dpi_float) as u32;
-            let swatch_size = palette_height / rows;
-            let palette_width = colors_per_row * swatch_size;
-            let palette_left = page_width_pixels - ((self.margins.right * dpi_float) as u32) - palette_width;
-            let palette_border = swatch_size / 4;
+            let mut rows = 0;
+            let mut colors_per_row;
+            let mut palette_top;
+            let mut palette_height;
+            let mut swatch_size;
+            let mut palette_width;
+            let palette_left;
+            let palette_border;
+            loop {
+                rows = rows + 1;
+                colors_per_row = (colors_except_bw + rows - 1) / rows; // colors_except_bw / rows, rounding up
+                palette_top = footer_top;
+                palette_height = (self.text_height * dpi_float) as u32;
+                swatch_size = palette_height / rows;
+                palette_width = colors_per_row * swatch_size;
+                //println!("Rows: {}", rows);
+                //println!("Colors per row: {}", colors_per_row);
+                //println!("Page width: {}", page_width_pixels);
+                //println!("Palette width: {}", palette_width);
+                // Exit the loop if we've packed it correctly.
+                if palette_width <= max_palette_width {
+                    // Only calculate these if we're reasonably sure we won't overflow.
+                    palette_left = page_width_pixels - ((self.margins.right * dpi_float) as u32) - palette_width;
+                    palette_border = swatch_size / 4;
+                    break;
+                }
+            }
             draw_filled_rect_mut(&mut out_image, Rect::at(palette_left as i32, palette_top as i32).of_size(palette_width, palette_height), Rgb([0, 0, 0]));
             for c in 0..(self.colors.len() - 2) {
                 let x = (palette_left + ((c as u32 % colors_per_row) * swatch_size) + palette_border) as i32;
