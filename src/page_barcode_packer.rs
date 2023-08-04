@@ -86,11 +86,11 @@ impl<'a> PageBarcodePacker {
         self
     }*/
 
-    /*pub fn damage_likelihood_map(mut self, m: DamageLikelihoodMap) -> Self {
+    pub fn damage_likelihood_map(mut self, m: DamageLikelihoodMap) -> Self {
         self.packing_cached = false;
         self.damage_likelihood_map = m;
         self
-    }*/
+    }
 
     /*pub fn format_version(mut self, v: u8) -> Self{
         if self.format_version != v {
@@ -194,7 +194,7 @@ impl<'a> PageBarcodePacker {
                 next_y += barcode_size + QUIET_ZONE_SIZE as u32;
             }
         }
-        println!("Packed {} barcodes onto page", self.cache_barcodes.len());
+        //println!("Packed {} barcodes onto page", self.cache_barcodes.len());
         self.packing_cached = true;
     }
 
@@ -240,15 +240,19 @@ impl<'a> PageBarcodePacker {
         // Fill the background with white so we don't have to do a quiet zone for each barcode individually.
         draw_filled_rect_mut(out_image, Rect::at(0, 0).of_size(out_image.width(), out_image.height()), Rgb([255, 255, 255]));
 
+        if parity_index > 0 {
+            panic!("Parity is not implemented yet");
+        }
+
         let mut start_offset: usize = 0;
         let num_color_planes = self.color_multiplexer.num_planes() as usize;
-        println!("Number of color planes: {}", num_color_planes);
+        //println!("Number of color planes: {}", num_color_planes);
         for (b_index, b_info) in barcodes.iter().enumerate() {
             let mut color_planes: Vec<RgbImage> = vec![];
             for c in 0..(num_color_planes) {
                 let full_barcode_index = b_index * num_color_planes + c;
 
-                println!("Generating page {} barcode {}/{}", page_number, full_barcode_index, barcodes.len() * num_color_planes);
+                //println!("Generating page {} barcode {}/{}", page_number, full_barcode_index, barcodes.len() * num_color_planes);
                 // Pull in the amount of data we need to fill this barcode, padded out with zeroes.
                 let mut barcode_data: Vec<u8> = vec!();
 
@@ -305,26 +309,26 @@ impl<'a> PageBarcodePacker {
                 //println!("Data length: {}", data.len());
                 if (start_offset + data_capacity) < data.len() {
                     // We can pull a full slice.
-                    println!("Full data slice - data capacity {} vs length {}", data_capacity, data.len());
+                    //println!("Full data slice - data capacity {} vs length {}", data_capacity, data.len());
                     barcode_slice = &data[start_offset..(start_offset + data_capacity)];
                 }
                 else if start_offset < data.len() {
                     // We can pull a partial slice.
-                    println!("Partial data slice");
+                    //println!("Partial data slice");
                     v = data[(start_offset as usize)..data.len()].to_vec();
                     v.resize(data_capacity, 0);
                     barcode_slice = v.as_slice();
                 }
                 else {
                     // We have to just use padding.
-                    println!("Just padding");
+                    //println!("Just padding");
                     v = vec![0 as u8; data_capacity];
                     barcode_slice = v.as_slice();
                 };
                 //println!("Data to encode: {:?}", barcode_slice);
                 barcode_data.extend_from_slice(barcode_slice);
-                println!("Data to encode: {:?}", barcode_data);
-                println!("Starting offset {}, advancing {}", start_offset, data_capacity);
+                //println!("Data to encode: {:?}", barcode_data);
+                //println!("Starting offset {}, advancing {}", start_offset, data_capacity);
 
                 color_planes.push(self.render_barcode(&b_info, &barcode_data));
 
