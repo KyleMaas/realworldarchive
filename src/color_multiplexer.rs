@@ -119,7 +119,32 @@ impl<'a> ColorMultiplexer {
 
         // Find the most dominant colors in the image.
         // We only really want the palette sample in the bottom right corner, ignoring the antialiased lettering.
-        let image_chunk = img.view(img.width() / 2, img.height() / 8 * 7, img.width() / 2, img.height() / 8).to_image();
+        let result = self.palettize_from_image_chunk(num_colors, img, img.width() / 2, img.height() / 8 * 7);
+        match result {
+            Err(_e) => {
+                // Try again, but with a larger area to palettize from - it may be a monochrome image without a palette.
+                let result2 = self.palettize_from_image_chunk(num_colors, img, img.width() / 2, img.height() / 2);
+                match result2 {
+                    Err(_e) => {
+                        // Don't change the palette.
+                        return;
+                    },
+                    Ok((rgb, hsl)) => {
+                        // This time it worked.
+                        self.colors_rgb = rgb;
+                        self.colors_hsl = hsl;
+                    }
+                }
+            },
+            Ok((rgb, hsl)) => {
+                self.colors_rgb = rgb;
+                self.colors_hsl = hsl;
+            }
+        };
+    }
+
+    fn palettize_from_image_chunk(&mut self, num_colors: u8, img: &DynamicImage, x: u32, y: u32) -> Result<(Vec<Rgb<u8>>, Vec<HSL>), &str> {
+        let image_chunk = img.view(x, y, img.width() - x, img.height() - y).to_image();
         //image_chunk.save("test_out/palettediagnostic.png").unwrap();
         /*let img_vec = image_chunk.as_raw();
         let pixels: Vec<Srgb> = cast::from_component_slice::<Srgb<u8>>(img_vec)
@@ -156,6 +181,11 @@ impl<'a> ColorMultiplexer {
             }
         }
 
+        if result.centroids.len() < self.colors_rgb.len() {
+            // Paletizing failed - Try again with a larger sample - it might be a monochrome page without a palette.
+            return Err("Not enough colors");
+        }
+
         // Convert colors to Srgb and then to HSL.
         let mut colors_rgb: Vec<Rgb<u8>> = vec![];
         let mut colors_hsl: Vec<HSL> = vec![];
@@ -167,7 +197,6 @@ impl<'a> ColorMultiplexer {
             colors_rgb.push(Rgb([r, g, b]));
             colors_hsl.push(HSL::from_rgb(&[r, g, b]));
         }
-        //println!("Remapped colors: {:?}", colors_rgb);
 
         // Sort the colors by HSL hue, putting the darkest color (which we'll treat as black) at the start and the lightest color (which we'll treat as white) at the end.
         // Bubble sort for simplicity.
@@ -195,7 +224,6 @@ impl<'a> ColorMultiplexer {
         let dark_rgb = colors_rgb.remove(darkest_color_index);
         colors_hsl.insert(0, dark_hsl);
         colors_rgb.insert(0, dark_rgb);
-        //println!("Colors after reordering black {:?}", colors_rgb);
 
         // Search for white.
         let mut lightest_color_index = colors_hsl.len() - 1;
@@ -208,14 +236,13 @@ impl<'a> ColorMultiplexer {
         let light_rgb = colors_rgb.remove(lightest_color_index);
         colors_hsl.push(light_hsl);
         colors_rgb.push(light_rgb);
-        //println!("Colors after reordering white {:?}", colors_rgb);
 
         // Reorder by Gray code.
-        (self.colors_rgb, self.colors_hsl) = reorder_by_gray_code(num_colors, colors_rgb, colors_hsl);
+        let out = reorder_by_gray_code(num_colors, colors_rgb, colors_hsl);
 
         println!("Repalettized to {:?}", self.colors_rgb);
 
-        //panic!("Stopping for now");
+        Ok(out)
     }
 
     pub fn multiplex_planes(&self, p: Vec<RgbImage>) -> RgbImage {
