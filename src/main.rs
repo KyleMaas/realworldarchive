@@ -25,7 +25,6 @@ use page_barcode_packer::{BarcodeFormat, PageBarcodePacker};
 use color_multiplexer::ColorMultiplexer;
 use file_decoder::FileDecoder;
 use glob::glob;
-use std::sync::Arc;
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {

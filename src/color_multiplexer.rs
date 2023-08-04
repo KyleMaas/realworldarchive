@@ -8,10 +8,8 @@ use image::GenericImage;
 use image::GenericImageView;
 use gray_codes::GrayCode8;
 use hsl::HSL;
-use palette::cast;
-use palette::{white_point::D65, FromColor, IntoColor, Lab, Srgb};
-use kmeans_colors::{get_kmeans_hamerly, Calculate, Kmeans, MapColor, Sort};
-use std::collections::HashSet;
+use palette::Srgb;
+use kmeans_colors::{get_kmeans_hamerly, Kmeans};
 
 pub struct ColorMultiplexer {
     colors_rgb: Vec<Rgb<u8>>,

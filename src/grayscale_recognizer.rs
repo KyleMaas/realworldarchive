@@ -4,10 +4,6 @@ use image::{DynamicImage, GenericImageView};
 use image::imageops::FilterType;
 //use rqrr::PreparedImage;
 use bardecoder;
-use image::imageops;
-use image::Rgba;
-use imageproc::rect::Rect;
-use imageproc::drawing::*;
 
 pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
     // Need GenericImageView trait to be able to use width() and height().
@@ -20,7 +16,7 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
     let decode_block_size = 800;
     let mut x = 0;
     let mut y = 0;
-    let quiet_zone = 200;
+    //let quiet_zone = 200;
 
     //println!("Attempting to decode");
     while y + decode_block_size / 2 < sized_up.height() {

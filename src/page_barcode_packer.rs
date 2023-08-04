@@ -42,12 +42,12 @@ pub fn make_radial_damage_map(min: f32, max: f32) -> DamageLikelihoodMap {
 struct MultiplexedBarcodeInfo {
     x: u32,
     y: u32,
-    width: u32,
-    height: u32,
-    damage_likelihood: f32,
+//    width: u32,
+//    height: u32,
+//    damage_likelihood: f32,
     version: Version,
     ec_level: EcLevel,
-    mode: Mode,
+//    mode: Mode,
     capacity_per_color_plane: u32
 }
 
@@ -80,25 +80,25 @@ impl<'a> PageBarcodePacker {
         out
     }
 
-    pub fn barcode_format(mut self, f: BarcodeFormat) -> Self {
+    /*pub fn barcode_format(mut self, f: BarcodeFormat) -> Self {
         self.packing_cached = false;
         self.barcode_format = f;
         self
-    }
+    }*/
 
-    pub fn damage_likelihood_map(mut self, m: DamageLikelihoodMap) -> Self {
+    /*pub fn damage_likelihood_map(mut self, m: DamageLikelihoodMap) -> Self {
         self.packing_cached = false;
         self.damage_likelihood_map = m;
         self
-    }
+    }*/
 
-    pub fn format_version(mut self, v: u8) -> Self{
+    /*pub fn format_version(mut self, v: u8) -> Self{
         if self.format_version != v {
             self.packing_cached = false;
         }
         self.format_version = v;
         self
-    }
+    }*/
 
     pub fn color_multiplexer(mut self, c: ColorMultiplexer) -> Self {
         self.packing_cached = false;
@@ -174,12 +174,12 @@ impl<'a> PageBarcodePacker {
             let new_code = MultiplexedBarcodeInfo {
                 x: next_x,
                 y: next_y,
-                width: barcode_size,
-                height: barcode_size,
-                damage_likelihood: dl,
+                //width: barcode_size,
+                //height: barcode_size,
+                //damage_likelihood: dl,
                 version: qrv,
                 ec_level: ec,
-                mode: Mode::Alphanumeric,
+                //mode: Mode::Alphanumeric,
                 capacity_per_color_plane: data_capacity
             };
             self.cache_barcodes.push(new_code);
