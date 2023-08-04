@@ -21,7 +21,7 @@ pub struct ColorMultiplexer {
 fn reorder_by_gray_code(num_colors: u8, colors_rgb: Vec<Rgb<u8>>, colors_hsl: Vec<HSL>) -> (Vec<Rgb<u8>>, Vec<HSL>) {
     // We're now assuming that the last color in the list is white.
     // Put them in Gray code order.
-    println!("Number of colors: {}", num_colors);
+    //println!("Number of colors: {}", num_colors);
     let gray_codes = GrayCode8::with_bits(num_colors.ilog2() as usize).collect::<Vec<u8>>();
     let mut gray_code_order_rgb: Vec<Rgb<u8>> = Vec::with_capacity(num_colors as usize);
     let mut gray_code_order_hsl: Vec<HSL> = Vec::with_capacity(num_colors as usize);
@@ -53,9 +53,9 @@ fn generate_palette(num_colors_unrounded: u8) -> (Vec<Rgb<u8>>, Vec<HSL>) {
     if num_colors_unrounded == 2 {
         return (vec![Rgb([0, 0, 0]), Rgb([255, 255, 255])], vec![HSL { h: 0.0, s: 0.0, l: 0.0 }, HSL { h: 0.0, s: 0.0, l: 1.0 }]);
     }
-    println!("Number of colors: {}", num_colors_unrounded);
+    //println!("Number of colors: {}", num_colors_unrounded);
     let num_colors = (2 as u8).pow(num_colors_unrounded.ilog2());
-    println!("Number of colors rounded: {}", num_colors);
+    //println!("Number of colors rounded: {}", num_colors);
     let mut colors_rgb = vec![Rgb([0, 0, 0])];
     let mut colors_hsl = vec![HSL { h: 0.0, s: 0.0, l: 0.0 }];
     for c in 0..(num_colors - 2) {
@@ -109,7 +109,7 @@ impl<'a> ColorMultiplexer {
     }
 
     pub fn palettize_from_image(&mut self, img: &DynamicImage) {
-        println!("Repalettizing from {:?}", self.colors_rgb);
+        //println!("Repalettizing from {:?}", self.colors_rgb);
 
         let num_colors = self.num_colors();
         if num_colors <= 2 {
@@ -240,7 +240,7 @@ impl<'a> ColorMultiplexer {
         // Reorder by Gray code.
         let out = reorder_by_gray_code(num_colors, colors_rgb, colors_hsl);
 
-        println!("Repalettized to {:?}", self.colors_rgb);
+        //println!("Repalettized to {:?}", self.colors_rgb);
 
         Ok(out)
     }
@@ -324,7 +324,7 @@ impl<'a> ColorMultiplexer {
             }
         }
 
-        println!("Demultiplexed {} color planes", num_images);
+        //println!("Demultiplexed {} color planes", num_images);
 
         planes
     }

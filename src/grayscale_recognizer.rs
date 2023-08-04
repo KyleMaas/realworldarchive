@@ -22,9 +22,9 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
     let mut y = 0;
     let quiet_zone = 200;
 
-    println!("Attempting to decode");
+    //println!("Attempting to decode");
     while y + decode_block_size / 2 < sized_up.height() {
-        println!("Decoding block at {}, {}", x, y);
+        //println!("Decoding block at {}, {}", x, y);
         let mut w = decode_block_size;
         if x + decode_block_size > sized_up.width() {
             w = sized_up.width() - x;
@@ -45,7 +45,7 @@ pub fn recognize_grayscale_barcodes(in_image: &DynamicImage) -> Vec<Vec<u8>> {
         // Once https://github.com/piderman314/bardecoder/issues/50 is resolved, the lines above can be replaced with:
         let results = decoder.decode(&*image_chunk);
         
-        println!("Done decoding - found {} results", results.len());
+        //println!("Done decoding - found {} results", results.len());
         for result in results {
             match result {
                 Result::Ok(r) => recognized_fragments.push(r.as_bytes().to_vec()),

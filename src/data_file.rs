@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
 
 use std::fs::File;
-use positioned_io::ReadAt;
+use positioned_io::{ReadAt, WriteAt};
 
-pub struct InputFileReader<'a> {
+pub struct DataFile<'a> {
     in_file: &'a str,
     file: File,
     len: u64,
@@ -11,14 +11,14 @@ pub struct InputFileReader<'a> {
     file_hash: u32
 }
 
-impl<'a> InputFileReader<'a> {
-    pub fn new(in_file: &'a str) -> InputFileReader<'a> {
+impl<'a> DataFile<'a> {
+    pub fn new(in_file: &'a str, writable: bool) -> DataFile<'a> {
         // TODO: Find a way to idiomatically exclusively lock files in a cross-platform manner, so we are making a lot of assumptions that the file won't change during read.
-        let file = File::open(in_file).unwrap();
+        let file = File::options().read(true).write(writable).truncate(writable).create(writable).open(in_file).unwrap();
         let metadata = file.metadata().unwrap();
         let len = metadata.len();
 
-        InputFileReader {
+        DataFile {
             in_file,
             file: file,
             len,
@@ -27,8 +27,8 @@ impl<'a> InputFileReader<'a> {
         }
     }
 
-    pub fn finalize(self) -> InputFileReader<'a> {
-        InputFileReader {
+    pub fn finalize(self) -> DataFile<'a> {
+        DataFile {
             in_file: self.in_file,
             file: self.file,
             len: self.len,
@@ -74,5 +74,16 @@ impl<'a> InputFileReader<'a> {
     /// Reads a chunk of data from the file and returns the actual read length
     pub fn get_chunk(&self, pos: u64, buf: &mut [u8]) -> usize {
         return self.file.read_at(pos, buf).unwrap();
+    }
+
+    // Writes a chunk of data to the file.
+    pub fn put_chunk(&mut self, pos: u64, buf: &[u8]) -> usize {
+        // Reset the hash to it's recalculated next time we're asked.
+        self.generated_hash = false;
+
+        // And readjust the length.
+        self.len = self.len.max(pos + buf.len() as u64);
+
+        return self.file.write_at(pos, buf).unwrap();
     }
 }

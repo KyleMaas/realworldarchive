@@ -13,16 +13,14 @@ mod stress_test_page;
 mod archive_human_output_file;
 mod archive_human_input_file;
 mod grayscale_recognizer;
-mod input_file_reader;
-mod output_file_writer;
+mod data_file;
 mod page_barcode_packer;
 mod color_multiplexer;
 mod file_decoder;
 use stress_test_page::StressTestPage;
 use archive_human_output_file::{OutputFormat, ArchiveHumanOutputFile};
 use archive_human_input_file::ArchiveHumanInputFile;
-use input_file_reader::InputFileReader;
-use output_file_writer::OutputFileWriter;
+use data_file::DataFile;
 use page_barcode_packer::{BarcodeFormat, PageBarcodePacker};
 use color_multiplexer::ColorMultiplexer;
 use file_decoder::FileDecoder;
@@ -160,7 +158,7 @@ fn main() {
             // Encode normal data.
             let in_file = matches.value_of("input").unwrap();
             let out_file = matches.value_of("output").unwrap();
-            let mut file_reader = InputFileReader::new(in_file).finalize();
+            let mut file_reader = DataFile::new(in_file, false).finalize();
             let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
             let header = in_file;
             let mut writer = ArchiveHumanOutputFile::new(out_file, format)
@@ -239,10 +237,11 @@ fn main() {
         else {
             // Decode normal data.
             let out_file = matches.value_of("output").unwrap();
-            let mut file_writer = OutputFileWriter::new(out_file).finalize();
+            let mut file_writer = DataFile::new(out_file, true).finalize();
             let mut color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
             let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
             let mut first_file = true;
+            let mut chunk_info = vec![];
             for f in in_files_glob {
                 match f {
                     Ok(filename) => {
@@ -251,13 +250,28 @@ fn main() {
                         let mut decoder = FileDecoder::new(&mut one_in_file).finalize();
 
                         // If it's the first page, go ahead and re-palettize the color multiplexer based on the colors found in it, to account for color distortion in the printing/scanning process.
-                        decoder.decode(&mut file_writer, &mut color_multiplexer, first_file);
+                        let mut chunks_on_page = decoder.decode(&mut file_writer, &mut color_multiplexer, first_file);
+                        chunk_info.append(&mut chunks_on_page);
                         first_file = false;
                     },
                     Err(e) => println!("{:?}", e)
                 }
             }
-            println!("Decoded using {} color planes", color_multiplexer.num_planes());
+            //println!("Decoded using {} color planes", color_multiplexer.num_planes());
+
+            // Make sure the has matches.
+            println!("Checking file integrity...");
+            if chunk_info.len() < 1 {
+                panic!("Could not find even a single barcode to read");
+            }
+            if chunk_info[0].total_length != file_writer.stream_len() {
+                panic!("Output file length {} does not match the expected {}", file_writer.stream_len(), chunk_info[0].total_length);
+            }
+            let hash = file_writer.file_hash() & 0x00ffffff;
+            if chunk_info[0].hash != hash {
+                panic!("File checksum {} did not match the expected {}", hash, chunk_info[0].hash);
+            }
+            println!("File passed integrity checks!");
         }
     }
 }
