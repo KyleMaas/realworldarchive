@@ -297,6 +297,89 @@ fn main() {
             if chunk_info.len() < 1 {
                 panic!("Could not find even a single barcode to read");
             }
+
+            // Sort the chunks by start offset for easier detection later.
+            // TODO: Use something other than bubble sort.
+            for i in 0..chunk_info.len() - 1 {
+                for j in (i + 1)..chunk_info.len() {
+                    if chunk_info[j].start_offset < chunk_info[i].start_offset {
+                        let temp = chunk_info[j];
+                        chunk_info[j] = chunk_info[i];
+                        chunk_info[i] = temp;
+                    }
+                }
+            }
+
+            // Look over all the byte ranges and make sure we've constructed the whole file, and if not, try to detect what we're missing.
+            let mut ranges: Vec<[u64; 2]> = vec![]; // Array of start offsets and end offsets, merged.
+            let mut page_numbers_we_have: Vec<u16> = vec![];
+            for i in 0..chunk_info.len() {
+                // Find the overlapping ranges.
+                let mut adjoins_or_overlaps = vec![];
+                let mut start_offset = chunk_info[i].start_offset;
+                let mut end_offset = start_offset + chunk_info[i].length as u64;
+                for j in 0..ranges.len() {
+                    if ranges[j][0] <= end_offset && ranges[j][1] >= start_offset {
+                        // New range overlaps.
+                        //println!("Range {:?} overlaps with chunk {:?}", ranges[j], chunk_info[i]);
+                        adjoins_or_overlaps.push(j);
+                        start_offset = start_offset.min(ranges[j][0]);
+                        end_offset = end_offset.max(ranges[j][1]);
+                    }
+                    /*else {
+                        println!("Range {:?} does not overlap {} to {}", ranges[j], start_offset, end_offset);
+                    }*/
+                }
+
+                // Remove all ranges which overlap in favor of the joined one.
+                adjoins_or_overlaps.sort();
+                for r in (0..adjoins_or_overlaps.len()).rev() {
+                    ranges.remove(adjoins_or_overlaps[r]);
+                }
+
+                // Add this new range.
+                //println!("New range: {} to {}", start_offset, end_offset);
+                ranges.push([start_offset, end_offset]);
+                //println!("Ranges is now: {:?}", ranges);
+                page_numbers_we_have.push(chunk_info[i].page_number);
+            }
+            page_numbers_we_have.sort();
+            page_numbers_we_have.dedup();
+
+            // Sort the ranges by starting offset.
+            for i in 0..ranges.len() - 1 {
+                for j in (i + 1)..ranges.len() {
+                    if ranges[j][0] < ranges[i][0] {
+                        let temp = ranges[j];
+                        ranges[j] = ranges[i];
+                        ranges[i] = temp;
+                    }
+                }
+            }
+
+            //println!("Ranges we have: {:?}", ranges);
+            let mut missing_ranges = vec![];
+            if ranges[0][0] != 0 {
+                missing_ranges.push([0, ranges[0][0]]);
+            }
+            for i in 0..ranges.len() - 1 {
+                missing_ranges.push([ranges[i][1], ranges[i + 1][0]]);
+            }
+
+            if chunk_info[0].total_length != ranges[ranges.len() - 1][1] {
+                // We're missing a chunk at the end.
+                // Add it to the list so we can attempt recovery.
+                missing_ranges.push([ranges[ranges.len() - 1][1], chunk_info[0].total_length]);
+            }
+            if missing_ranges.len() > 0 {
+                for m in 0..missing_ranges.len() {
+                    println!("Could not recover bytes {} through {}", missing_ranges[m][0], missing_ranges[m][1]);
+                }
+                // TODO: Show which pages we're missing where we could recover if we had them.
+                panic!("Chunks of the file are missing");
+            }
+
+            // Final integrity checks.
             if chunk_info[0].total_length != file_writer.stream_len() {
                 panic!("Output file length {} does not match the expected {}", file_writer.stream_len(), chunk_info[0].total_length);
             }

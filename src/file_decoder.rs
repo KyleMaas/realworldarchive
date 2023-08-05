@@ -10,6 +10,7 @@ pub struct FileDecoder<'a> {
     file_reader: &'a mut ArchiveHumanInputFile<'a>
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct DecodedChunkInfo {
     pub page_number: u16,
     pub barcode_number: u16,
@@ -53,6 +54,7 @@ impl<'a, 'b> FileDecoder<'a> {
                 let total_length = u64::from_be_bytes([0, 0, data_chunk[11], data_chunk[12], data_chunk[13], data_chunk[14], data_chunk[15], data_chunk[16]]);
                 let hash = u32::from_be_bytes([0, data_chunk[17], data_chunk[18], data_chunk[19]]);
                 let overhead: usize = 20;
+                let mut amount_written: u32 = 0;
                 if start_offset > total_length {
                     //Padding - ignore it.
                     //println!("Pure padding - ignoring");
@@ -61,17 +63,19 @@ impl<'a, 'b> FileDecoder<'a> {
                     // Partial chunk.
                     //println!("Partial chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (total_length as usize - start_offset as usize));
                     file_writer.put_chunk(start_offset, &data_chunk[overhead..(total_length as usize - start_offset as usize + overhead)]);
+                    amount_written = (total_length - start_offset) as u32;
                 }
                 else {
                     //println!("Full chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (data_chunk.len() - overhead));
                     file_writer.put_chunk(start_offset, &data_chunk[overhead..data_chunk.len()]);
+                    amount_written = (data_chunk.len() - overhead) as u32;
                 }
                 return Ok(DecodedChunkInfo {
                     page_number: page_number,
                     barcode_number: barcode_number,
                     start_offset: start_offset,
                     total_length: total_length,
-                    length: (data_chunk.len() - overhead) as u32,
+                    length: amount_written,
                     hash: hash
                 });
             },
