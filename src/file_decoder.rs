@@ -12,6 +12,7 @@ pub struct FileDecoder<'a> {
 
 #[derive(Debug, Copy, Clone)]
 pub struct DecodedChunkInfo {
+    pub is_parity: bool,
     pub page_number: u16,
     pub barcode_number: u16,
     pub start_offset: u64,
@@ -33,7 +34,7 @@ impl<'a, 'b> FileDecoder<'a> {
         }
     }
 
-    fn process_decoded_chunk(&mut self, encoded_data: &Vec<u8>, file_writer: &mut DataFile) -> Result<DecodedChunkInfo, &str> {
+    fn process_decoded_chunk(&mut self, encoded_data: &Vec<u8>, file_writer: &mut DataFile, parity_buffer: &mut Vec<Vec<u8>>) -> Result<DecodedChunkInfo, &str> {
         // Don't know why there are 4 bytes of junk at the start of this.
         match decode(&std::str::from_utf8(&encoded_data).unwrap()) {
             Ok(data_chunk) => {
@@ -50,11 +51,25 @@ impl<'a, 'b> FileDecoder<'a> {
 
                 let page_number = u16::from_be_bytes([data_chunk[1], data_chunk[2]]);
                 let barcode_number = u16::from_be_bytes([data_chunk[3], data_chunk[4]]);
-                let start_offset = u64::from_be_bytes([0, 0, data_chunk[5], data_chunk[6], data_chunk[7], data_chunk[8], data_chunk[9], data_chunk[10]]);
+                let is_parity: bool = (data_chunk[3] & 0b10000000) != 0;
+                let start_offset = if !is_parity {
+                    u64::from_be_bytes([0, 0, data_chunk[5], data_chunk[6], data_chunk[7], data_chunk[8], data_chunk[9], data_chunk[10]])
+                } else {
+                    u64::from_be_bytes([0, 0, 0, 0, data_chunk[7], data_chunk[8], data_chunk[9], data_chunk[10]])
+                };
+                let parity_index: u8 = data_chunk[6];
                 let total_length = u64::from_be_bytes([0, 0, data_chunk[11], data_chunk[12], data_chunk[13], data_chunk[14], data_chunk[15], data_chunk[16]]);
                 let hash = u32::from_be_bytes([0, data_chunk[17], data_chunk[18], data_chunk[19]]);
                 let overhead: usize = 20;
                 let mut amount_written: u32 = 0;
+
+                // If this is for parity, make sure the buffer's prepped.
+                if is_parity {
+                    while parity_buffer.len() <= parity_index as usize {
+                        parity_buffer.push(vec![]);
+                    }
+                }
+
                 if start_offset > total_length {
                     //Padding - ignore it.
                     //println!("Pure padding - ignoring");
@@ -62,15 +77,30 @@ impl<'a, 'b> FileDecoder<'a> {
                 else if start_offset + (data_chunk.len() - overhead) as u64 > total_length {
                     // Partial chunk.
                     //println!("Partial chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (total_length as usize - start_offset as usize));
-                    file_writer.put_chunk(start_offset, &data_chunk[overhead..(total_length as usize - start_offset as usize + overhead)]);
                     amount_written = (total_length - start_offset) as u32;
                 }
                 else {
                     //println!("Full chunk on page {}, barcode number {}, at {}/{} with length {}", page_number, barcode_number, start_offset, total_length, (data_chunk.len() - overhead));
-                    file_writer.put_chunk(start_offset, &data_chunk[overhead..data_chunk.len()]);
                     amount_written = (data_chunk.len() - overhead) as u32;
                 }
+                if amount_written > 0 {
+                    if !is_parity {
+                        file_writer.put_chunk(start_offset, &data_chunk[overhead..(amount_written as usize + overhead)]);
+                    }
+                    else {
+                        let end_index = start_offset as usize + amount_written as usize;
+                        let p = parity_index as usize;
+                        let s = start_offset as usize;
+                        while parity_buffer[p].len() < end_index {
+                            parity_buffer[p].push(0);
+                        }
+                        for b in 0..amount_written as usize {
+                            parity_buffer[p][s + b] = data_chunk[overhead + b];
+                        }
+                    }
+                }
                 return Ok(DecodedChunkInfo {
+                    is_parity: is_parity,
                     page_number: page_number,
                     barcode_number: barcode_number,
                     start_offset: start_offset,
@@ -86,7 +116,7 @@ impl<'a, 'b> FileDecoder<'a> {
         }
     }
 
-    pub fn decode(&mut self, file_writer: &mut DataFile, color_multiplexer: &mut ColorMultiplexer, adjust_colors: bool) -> Vec<DecodedChunkInfo> {
+    pub fn decode(&mut self, file_writer: &mut DataFile, parity_buffer: &mut Vec<Vec<u8>>, color_multiplexer: &mut ColorMultiplexer, adjust_colors: bool) -> Vec<DecodedChunkInfo> {
         // Just doing this once for now.
         let mut chunk_info = vec![];
         let page_image = self.file_reader.read_page().unwrap();
@@ -97,7 +127,7 @@ impl<'a, 'b> FileDecoder<'a> {
         for d in demuxed_images {
             let chunks = recognize_grayscale_barcodes(&d);
             for c in chunks {
-                let result = self.process_decoded_chunk(&c, file_writer);
+                let result = self.process_decoded_chunk(&c, file_writer, parity_buffer);
                 match result {
                     Err(_e) => {
                         // Ignore decode errors for now.

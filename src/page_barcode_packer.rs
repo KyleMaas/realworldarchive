@@ -233,15 +233,15 @@ impl<'a> PageBarcodePacker {
         code_image
     }
 
-    pub fn encode(&self, out_image: &mut RgbImage, page_number: u16, is_parity_page: bool, parity_index: u16, file_checksum: u32, page_start_offset: u64, total_length: u64, data: &[u8]) {
+    pub fn encode(&self, out_image: &mut RgbImage, page_number: u16, is_parity_page: bool, parity_index: u8, file_checksum: u32, page_start_offset: u64, total_length: u64, data: &[u8]) {
         // Pulling this out into its own reference so we can pseudorandomize this later.
         let barcodes: &Vec<MultiplexedBarcodeInfo> = &self.cache_barcodes;
 
         // Fill the background with white so we don't have to do a quiet zone for each barcode individually.
         draw_filled_rect_mut(out_image, Rect::at(0, 0).of_size(out_image.width(), out_image.height()), Rgb([255, 255, 255]));
 
-        if parity_index > 0 {
-            panic!("Parity is not implemented yet");
+        if !is_parity_page && parity_index > 0 {
+            panic!("We can currently only generate whole pages of parity");
         }
 
         let mut start_offset: usize = 0;
@@ -268,20 +268,35 @@ impl<'a> PageBarcodePacker {
                 let mut byte_1 = ((full_barcode_index >> 16) & 0x0f) as u8;
                 let byte_2 = (full_barcode_index & 0xff) as u8;
                 if is_parity_page {
-                    byte_1 |= 0b1000000;
+                    byte_1 |= 0b10000000;
                 }
                 barcode_data.push(byte_1);
                 barcode_data.push(byte_2);
 
                 // Next 6 bytes - offset from the start of the file, big endian.
                 // TODO: This might need to be the parity page number we're encoding.
-                let start_offset_bytes = (page_start_offset + (start_offset as u64)).to_be_bytes();
-                barcode_data.push(start_offset_bytes[2]);
-                barcode_data.push(start_offset_bytes[3]);
-                barcode_data.push(start_offset_bytes[4]);
-                barcode_data.push(start_offset_bytes[5]);
-                barcode_data.push(start_offset_bytes[6]);
-                barcode_data.push(start_offset_bytes[7]);
+                if !is_parity_page {
+                    let start_offset_bytes = (page_start_offset + (start_offset as u64)).to_be_bytes();
+                    barcode_data.push(start_offset_bytes[2]);
+                    barcode_data.push(start_offset_bytes[3]);
+                    barcode_data.push(start_offset_bytes[4]);
+                    barcode_data.push(start_offset_bytes[5]);
+                    barcode_data.push(start_offset_bytes[6]);
+                    barcode_data.push(start_offset_bytes[7]);
+                }
+                else {
+                    // Format is:
+                    // * 1 byte reserved - set to 0 for now
+                    // * 1 byte parity index
+                    // * 4 bytes start offset
+                    barcode_data.push(0);
+                    barcode_data.push(parity_index);
+                    let start_offset_bytes = (((page_start_offset + (start_offset as u64)) & 0xffffffff) as u32).to_be_bytes();
+                    barcode_data.push(start_offset_bytes[0]);
+                    barcode_data.push(start_offset_bytes[1]);
+                    barcode_data.push(start_offset_bytes[2]);
+                    barcode_data.push(start_offset_bytes[3]);
+                }
 
                 // Next 6 bytes - total document length, big endian.
                 let total_length_bytes = total_length.to_be_bytes();

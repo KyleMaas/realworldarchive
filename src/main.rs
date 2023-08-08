@@ -7,6 +7,7 @@ extern crate image;
 extern crate bardecoder;
 extern crate env_logger;
 extern crate glob;
+extern crate reed_solomon_erasure;
 use image::RgbImage;
 
 mod stress_test_page;
@@ -25,6 +26,7 @@ use page_barcode_packer::{BarcodeFormat, PageBarcodePacker, make_constant_damage
 use color_multiplexer::ColorMultiplexer;
 use file_decoder::FileDecoder;
 use glob::glob;
+use reed_solomon_erasure::galois_8::ReedSolomon;
 
 fn validate_integer(v: String) -> Result<(), String> {
     match v.parse::<u16>() {
@@ -44,6 +46,20 @@ fn validate_percentage(v: String) -> Result<(), String> {
             }
         },
         Err(_) => return Err(String::from("Value given was not a percentage in the range [0..100]."))
+    }
+}
+
+fn validate_parity(v: String) -> Result<(), String> {
+    match v.parse::<u8>() {
+        Ok(n) => {
+            if n <= 63 {
+                return Ok(());
+            }
+            else {
+                return Err(String::from("Value given was not in the range [0..63]."));
+            }
+        },
+        Err(_) => return Err(String::from("Value given was not in the range [0..63]."))
     }
 }
 
@@ -154,7 +170,8 @@ fn main() {
                     .arg(Arg::with_name("parity")
                         .short("p")
                         .long("parity")
-                        .help("Number of pages of parity to generate.  This equates to the number of full pages which can be lost from the rest of the document.  Defaults to \"0\"")
+                        .help("Number of pages of parity to generate in the range [0..63].  This equates to the number of full pages which can be lost from the rest of the document.  Defaults to \"0\"")
+                        .validator(validate_parity)
                         .default_value("0"))
                     .arg(Arg::with_name("stresstest")
                         .short("t")
@@ -189,6 +206,7 @@ fn main() {
             let out_file = matches.value_of("output").unwrap();
             let mut file_reader = DataFile::new(in_file, false).finalize();
             let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
+            let parity_pages = matches.value_of("parity").unwrap().parse::<u8>().unwrap();
             let damage_function = matches.value_of("ecfunction").unwrap();
             let ec_min = matches.value_of("ecmin").unwrap().parse::<u8>().unwrap() as f32 / 100.0;
             let ec_max = matches.value_of("ecmax").unwrap().parse::<u8>().unwrap() as f32 / 100.0;
@@ -225,7 +243,8 @@ fn main() {
             let mut out_image = RgbImage::new(w, h);
             //println!("Checking for data bytes per page");
             let block_size = barcode_packer.data_bytes_per_page() as u64;
-            let total_pages = ((total_len + (block_size - 1)) / block_size) as u16;
+            let total_data_pages = ((total_len + (block_size - 1)) / block_size) as u16;
+            let total_pages = total_data_pages + parity_pages as u16;
             writer.set_total_pages(total_pages);
             //println!("Block size: {}", block_size);
             let mut block_buffer_vec: Vec<u8> = vec![];
@@ -254,6 +273,90 @@ fn main() {
                 //out_image.save(numbered_filename).unwrap();
                 start_offset += block_size;
             }
+
+            // Add parity pages.
+            if parity_pages > 0 {
+                println!("Calculating parity...");
+
+                // First, go through and calculate parity to buffers.
+                let mut parity_data: Vec<Vec<u8>> = vec![];
+                for _p in 0..parity_pages {
+                    parity_data.push(vec![]);
+                }
+
+                // Do parity calculation on blocks of bytes at a time rather than one at a time, to cut down on the number of I/O ops.
+                // This is how many bytes of parity we're calculating at a time.
+                // TODO: Vary the size of the read blocks based on how large the actual file is - the main point here is to split it up so we're not reading the entire file into memory to do parity, so if the file is short, this block size could be larger and still not use a ton of RAM.
+                let bytes_per_read = 256;
+                let mut parity_block_start_offset = 0;
+                while parity_block_start_offset < block_size {
+                    // Skip through the document on a stride of the page size and an offset of parity_block_start_offset.
+                    let mut data_read_block_start_offset = parity_block_start_offset;
+                    // This variable will hold the reformatted data to run parity on - for example:
+                    // [0][0] will be byte 0 of the first page of the document, [0][1] will be the first byte of barcode #0 on the next page, etc.
+                    // [1][0] will be byte 1 of the first page of the document, [1][1] will be the second byte of barcode #0 on the next page, etc.
+                    // Each byte has to be wrapped in another Vec due to the way that reed-solomon-erasure works with shards as slices.
+                    let mut data_streams_for_parity: Vec<Vec<Vec<u8>>> = vec![];
+                    for _b in 0..bytes_per_read {
+                        data_streams_for_parity.push(vec![]);
+                    }
+                    while data_read_block_start_offset < total_len {
+                        // Read one block worth of data and reformat it into the parity block buffers.
+                        // By prefilling this with 0's, we're dealing with the padding issue for parity calculations.
+                        let mut block_buffer = vec![];
+                        for _b in 0..bytes_per_read {
+                            block_buffer.push(0);
+                        }
+                        file_reader.get_chunk(data_read_block_start_offset, block_buffer.as_mut_slice());
+                        for b in 0..bytes_per_read {
+                            data_streams_for_parity[b].push(vec![block_buffer[b]]);
+                        }
+
+                        // Advance to the next page.
+                        data_read_block_start_offset += block_size;
+                    }
+
+                    // Pad these to length so even if we go off the end of the document reading we can still calculate parity.
+                    for b in 0..bytes_per_read {
+                        for _c in (data_streams_for_parity[b].len() as u16)..total_data_pages {
+                            data_streams_for_parity[b].push(vec![0]);
+                        }
+                    }
+
+                    // Calculate parity.
+                    // As a reminder, we're doing this such that each parity byte 0 protects data byte 0 of each page.
+                    // Because of this, data_streams_for_parity[0].len() should always be the same as the number of data pages.
+                    // We've ensured this above by padding to length.
+                    /*if total_data_pages as usize != data_streams_for_parity[0].len() {
+                        panic!("Somehow we ended up with a stream of bytes for parity with length {} which is not the same as the number of data pages {} (starting offset {})", data_streams_for_parity[0].len(), total_data_pages, parity_block_start_offset);
+                    }*/
+                    let num_data_bytes = total_data_pages as usize;
+                    let enc = ReedSolomon::new(num_data_bytes, parity_pages as usize).unwrap();
+                    for b in 0..bytes_per_read {
+                        // Add placeholders for the parity bytes.
+                        for _p in 0..parity_pages {
+                            data_streams_for_parity[b].push(vec![0]);
+                        }
+                        enc.encode(data_streams_for_parity[b].as_mut_slice()).unwrap();
+                        for p in 0..(parity_pages as usize) {
+                            let parity_byte = data_streams_for_parity[b][num_data_bytes + p][0];
+                            parity_data[p].push(parity_byte);
+                        }
+                    }
+
+                    // Advance our read block position.
+                    parity_block_start_offset += bytes_per_read as u64;
+                }
+
+                // Write out the parity pages.
+                for p in 0..parity_pages {
+                    println!("Generating parity page {}...", (p + 1));
+                    let page_number = total_data_pages + p as u16 + 1;
+                    //println!("Parity bytes: {:?}", parity_data[p as usize]);
+                    barcode_packer.encode(&mut out_image, page_number, true, p as u8, file_checksum, 0, total_len, &parity_data[p as usize][0..block_size as usize]);
+                    writer.write_page(&out_image, page_number);
+                }
+            }
         }
     }
     else {
@@ -275,6 +378,7 @@ fn main() {
             let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
             let mut first_file = true;
             let mut chunk_info = vec![];
+            let mut parity_buffer: Vec<Vec<u8>> = vec![]; // Each element is a vector of bytes for that page.
             for f in in_files_glob {
                 match f {
                     Ok(filename) => {
@@ -283,7 +387,7 @@ fn main() {
                         let mut decoder = FileDecoder::new(&mut one_in_file).finalize();
 
                         // If it's the first page, go ahead and re-palettize the color multiplexer based on the colors found in it, to account for color distortion in the printing/scanning process.
-                        let mut chunks_on_page = decoder.decode(&mut file_writer, &mut color_multiplexer, first_file);
+                        let mut chunks_on_page = decoder.decode(&mut file_writer, &mut parity_buffer, &mut color_multiplexer, first_file);
                         chunk_info.append(&mut chunks_on_page);
                         first_file = false;
                     },
@@ -314,6 +418,16 @@ fn main() {
             let mut ranges: Vec<[u64; 2]> = vec![]; // Array of start offsets and end offsets, merged.
             let mut page_numbers_we_have: Vec<u16> = vec![];
             for i in 0..chunk_info.len() {
+                // Skip parity for now.
+                if chunk_info[i].is_parity {
+                    continue;
+                }
+
+                // Skip barcodes which are purely padding.
+                if chunk_info[i].start_offset > chunk_info[0].total_length {
+                    continue;
+                }
+
                 // Find the overlapping ranges.
                 let mut adjoins_or_overlaps = vec![];
                 let mut start_offset = chunk_info[i].start_offset;
@@ -370,6 +484,94 @@ fn main() {
                 // We're missing a chunk at the end.
                 // Add it to the list so we can attempt recovery.
                 missing_ranges.push([ranges[ranges.len() - 1][1], chunk_info[0].total_length]);
+            }
+            if missing_ranges.len() > 0 {
+                println!("Missing chunks...attempting recovery...");
+                
+                // First, we need to figure out how large a page is.
+                let mut page_size = 0;
+                for c in 0..chunk_info.len() - 1 {
+                    if chunk_info[c].is_parity {
+                        continue;
+                    }
+                    for d in (c + 1)..chunk_info.len() {
+                        if chunk_info[d].is_parity {
+                            continue;
+                        }
+
+                        // If barcode numbers match and page number only differs by 1, then we have a stride we can work with.
+                        if chunk_info[c].barcode_number == chunk_info[d].barcode_number && (chunk_info[c].page_number as i32 - chunk_info[d].page_number as i32).abs() == 1 {
+                            page_size = chunk_info[c].start_offset.max(chunk_info[d].start_offset) - chunk_info[c].start_offset.min(chunk_info[d].start_offset);
+                        }
+                    }
+                    if page_size != 0 {
+                        break;
+                    }
+                }
+                if page_size == 0 {
+                    panic!("Could not find enough information to calculate page size.  Unable to continue with reconstruction of missing chunks.");
+                }
+
+                // Attempt to reconstruct each chunk.
+                while missing_ranges.len() > 0 {
+                    // TODO: Do this in batches instead of one byte at a time, to save on I/O operations.  We're only doing it this way for now for simplicity.
+                    for b in missing_ranges[0][0]..missing_ranges[0][1] {
+                        // For each missing byte...
+                        let total_length = chunk_info[0].total_length;
+                        let num_data_pages = (total_length + page_size - 1) / page_size;
+                        //let total_length_rounded_up_for_padding = page_size * num_pages;
+                        let offset_into_parity = b % page_size;
+                        let missing_on_page_number = b / page_size;
+                        let mut recovery_byte_buffer: Vec<Option<Vec<u8>>> = vec![];
+                        let parity_pages = parity_buffer.len();
+                        let dec = ReedSolomon::new(num_data_pages as usize, parity_pages as usize).unwrap();
+                        for p in 0..num_data_pages {
+                            // Pull the bytes back out of the output file.
+                            let start_offset = offset_into_parity + (p * page_size);
+                            let mut is_missing = false;
+                            for m in 0..missing_ranges.len() {
+                                if start_offset >= missing_ranges[m][0] && start_offset < missing_ranges[m][1] {
+                                    is_missing = true;
+                                    break;
+                                }
+                            }
+                            if is_missing {
+                                recovery_byte_buffer.push(None);
+                            }
+                            else {
+                                let mut one_byte = [0 as u8];
+                                file_writer.get_chunk(start_offset, &mut one_byte);
+                                recovery_byte_buffer.push(Some(vec![one_byte[0]]));
+                            }
+                        }
+
+                        // Add the parity onto the end and try to reconstruct.
+                        for p in 0..parity_pages as usize {
+                            recovery_byte_buffer.push(
+                                if (offset_into_parity as usize) < parity_buffer[p].len() {
+                                    Some(vec![parity_buffer[p][offset_into_parity as usize]])
+                                }
+                                else {
+                                    None
+                                });
+                        }
+                        //println!("Byte buffer before reconstruction: {:?}", recovery_byte_buffer);
+                        dec.reconstruct(recovery_byte_buffer.as_mut_slice()).unwrap();
+                        //println!("Byte buffer after reconstruction: {:?}", recovery_byte_buffer);
+                        let recovered_byte = &recovery_byte_buffer[missing_on_page_number as usize];
+                        //println!("Recovered byte: {:?}", recovered_byte);
+                        let recovered_byte_value = match recovered_byte {
+                            Some(ref x) => x[0],
+                            None => panic!("Could not reconstruct byte {} on page {}", b, missing_on_page_number)
+                        };
+                        println!("Reconstructed byte {} on page {} as {}", b, missing_on_page_number, recovered_byte_value);
+                        file_writer.put_chunk(b, &vec![recovered_byte_value]);
+                        //panic!("That's as far as we're going to go for now.");
+                    }
+
+                    // Now that we've cleared this range, remove it from the unrecoverable list.
+                    missing_ranges.remove(0);
+                }
             }
             if missing_ranges.len() > 0 {
                 for m in 0..missing_ranges.len() {

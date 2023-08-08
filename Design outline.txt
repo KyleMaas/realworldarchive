@@ -17,6 +17,17 @@ Assumptions
 
 
 
+======
+Limits
+======
+* Files which can encoded are limited to a size of 2 ^ 48 bytes (256 TiB).  This is due to the 48-bit unsigned start offsets for barcodes.
+* A document can only contain 2 ^ 16 - 1 (65535) pages.  This is because page numbers are 1-based for human readability and are stored in a 16-bit unsigned page number value.
+* A page can only contain 2 ^ 12 (4096) "barcodes".  This is because barcode numbers are stored in the lower 12 bits of a 16-bit unsigned value.  This includes the color planes being multiplexed into a section of the page, so for color documents you will need to divide this number by the number of available color plane bits.
+* Number of parity pages can be any number from 0-255.  This is because the parity index is stored as a single byte.
+* If parity is used, each page can only contain 2 ^ 32 bytes (4 GiB).  This is because the start offset for parity is stored as a 32-bit unsigned value.  Theoretically, this could be dropped in the future if we can figure out an intelligent way to find the start index of a parity chunk by finding a matching barcode number somewhere in the document and stepping backward by the page size until we reach the start.  However, for practical purposes, this limit is unlikely to be hit in practice.
+
+
+
 ===========
 Data format
 ===========
@@ -32,7 +43,7 @@ We would also need to figure out how to do parity correctly with pseudorandomize
 
 Data is to be padded out to fit the end of the final page, which is why we're included a total data length.  This padding is included in the parity calculations and can be anything which is stable across runs - zeroes or stable pseudorandom data.  For the initial encoder version, we may be using zeroes.  But even if we are, the reader cannot assume this and must read this data for the purposes of parity checking.
 
-Parity is generated across the entire document.  The first parity byte is the parity of the first bytes of all pages.  The second parity byte is the parity of the second bytes of all pages.  Although exceedingly time-consuming to generate, and requiring tons of seeks across the source file, this means the error correction covers the entire file.  If we did it more segmented, loss could only occur a few times per segment.
+Parity is generated across the entire document.  The first parity byte (one with starting offset 0 and skip of a page length) is the parity of the first bytes of all pages concatenated together.  The second parity byte is the parity of the second bytes of all pages.  Although exceedingly time-consuming to generate, and requiring tons of seeks across the source file, this means the error correction covers the entire file.  If we did it more segmented, loss could only occur a few times per segment.
 Additional pages of parity are subsequent parity output for the exact same input bytes.  So the first parity byte of the second parity page protects the first byte of all of the other pages.  Again, exceedingly time-consuming and memory-intensive, but this allows for very good protection against losing entire pages.
 Since we're doing this parity calculation essentially striped across the entire document, the final page data padding must be taken into account for parity calculations.
 
@@ -43,18 +54,23 @@ TODO: Figure out how to do on-page parity as well, so pages can contain both dat
 Barcode binary data is encoded using base-45 encoding (see IETF RFC 9385) so we can use alphanumeric mode in our barcodes.  This may come at a slight density cost, but encoding/decoding support for raw binary mode is not great.
 
 Within the base-45 encoding, the binary data for each barcode is encoded as follows (nominally 20 bytes wasted per barcode when using version 1):
-Format version: encoded similarly to UTF-8 - at this time, the high bit is reserved for this for later use and we can assume the version will be one byte for quite a few versions.
-Page number: 16-bit big endian unsigned integer.  More compact than storing "bytes per page" and can be used to easily make user interfaces for partial scanning or recovering missing pages.  Total page counts include the parity pages.  Page numbers are 1-based so the data representation matches what's displayed to the user and optionally shown in printable page metadata.  We don't really need this for reconstruction - from a functional perspective, it's purely so we can show the user which pages we've read and can keep track of which ones are missing.
-Barcode number on page: 16-bit big endian unsigned integer/bitfield (required so we can recover from barcodes out of order or some barcodes unrecoverable):
-* 16: Whether this is a parity page
-* 15: (Not sure we actually need this.  Leaving unimplemented for now.  If not used in completed implementation, drop it.) Whether this is the last barcode in the regular data or parity sections.  For both sections, their last barcode should have this bit set.
-* 14: (Not sure we actually need this.  Leaving unimplemented for now.  If not used in completed implementation, drop it.) Whether this is the last barcode in the page.
-* 13: Reserved
-* 12-1: Barcode number
-Offset from start of file: 48-bit big endian unsigned integer indicating number of bytes offset from the start of the file that the start of this barcode's data is at.  Required because for proper seeking, we either need to know how many bytes per page and multiply, or have an offset.  This is nearly as compact and much more reliable than a page length and multiplier.  For data, this may be past the end of the document if we're in the padding section on the final page.  For parity pages, this number is meaningless, so instead it contains the index of the parity bytes (which parity page) we're encoding, since we are doing parity over the same blocks on each page so barcode 0 is the parity of all other pages' barcode 0s, so we really only need the barcode number for "position" information which is why this is free for use as the parity page number.
-Total document length: 48-bit big endian unsigned integer indicating number of bytes in the original source document.  This field is the same for all barcodes, both data and parity.
-Document hash: 24-bit unsigned integer.  To reduce the likelihood of mixing up pages from two documents of the same length.  Must be the same for all pages in our document.  Lowest three bytes of hash of the document, generated using a single-depth CRC32 Merkle tree with block size of 1MiB for better parallelism than straight CRC32.  There are more standardized ways to do this (some of the SHA-3 candidates, Tiger Tree Hash, etc.), but we don't need the security they provide, so CRC32 was chosen due to simplicity of implementation.  Essentially, take each 1MiB bucket of data (with the document padded with zeroes to a 1MiB boundary), generate a CRC32, concatenate all CRC32s together in big-endian format, and take the CRC32 of that.  Then take the 3 lowest bytes of that CRC32 (big endian order) to use for the hash.
-Data chunk: octets of data until the end of the barcode.  Or, if filling out the final page with data, this can be padding which is included in parity calculations and to make barcode fitting on a page consistent across all pages.
+* Format version: encoded similarly to UTF-8 - at this time, the high bit is reserved for this for later use and we can assume the version will be one byte for quite a few versions.
+* Page number: 16-bit big endian unsigned integer.  More compact than storing "bytes per page" and can be used to easily make user interfaces for partial scanning or recovering missing pages.  Total page counts include the parity pages. Page numbers are 1-based so the data representation matches what's displayed to the user and optionally shown in printable page metadata.  We don't really need this for reconstruction - from a functional perspective, it's purely so we can show the user which pages we've read and can keep track of which ones are missing.
+* Barcode number on page: 16-bit big endian unsigned integer/bitfield (required so we can recover from barcodes out of order or some barcodes unrecoverable):
+* - 16: Whether this is a parity barcode
+* - 15: (Not sure we actually need this.  Leaving unimplemented for now.  If not used in completed implementation, drop it.) Whether this is the last barcode in the regular data or parity sections.  For both sections, their last barcode should have this bit set.
+* - 14: (Not sure we actually need this.  Leaving unimplemented for now.  If not used in completed implementation, drop it.) Whether this is the last barcode in the page.
+* - 13: Reserved
+* - 12-1: Barcode number
+* Offset from start of file:
+* - For data barcodes, 48-bit big endian unsigned integer indicating number of bytes offset from the start of the file that the start of this barcode's data is at.  Required because for proper seeking, we either need to know how many bytes per page and multiply, or have an offset.  This is nearly as compact and much more reliable than a page length and multiplier.  For data, this may be past the end of the document if we're in the padding section on the final page.  
+* - For parity pages, this number is meaningless, so instead it contains (apologies for the weird alignment, but parity is likely to be a very small proportion of a document that it's not worth reducing data density for it):
+* - - 1 byte reserved for future use.  Set to 0 for now.
+* - - 1 byte of the index of the parity bytes (which parity page) we're encoding.
+* - - 4 bytes indicating where the parity starts.  Parity is defined using a start offset and a skip factor.  So for example, for barcode 0 this would also be 0 to indicate that this parity block starts protecting data startiong at byte 0.  Skip factor must be calculated by comparing matching barcodes between pages - for example, the offset difference between barcode 0 of the first page to barcode 0 of the second page.
+* Total document length: 48-bit big endian unsigned integer indicating number of bytes in the original source document.  This field is the same for all barcodes, both data and parity.  This count does not include the length of the parity data, but is only the length of the original file.
+* Document hash: 24-bit unsigned integer.  To reduce the likelihood of mixing up pages from two documents of the same length.  Must be the same for all pages in our document.  Lowest three bytes of hash of the document, generated using a single-depth CRC32 Merkle tree with block size of 1MiB for better parallelism than straight CRC32.  There are more standardized ways to do this (some of the SHA-3 candidates, Tiger Tree Hash, etc.), but we don't need the security they provide, so CRC32 was chosen due to simplicity of implementation.  Essentially, take each 1MiB bucket of data (with the document padded with zeroes to a 1MiB boundary), generate a CRC32, concatenate all CRC32s together in big-endian format, and take the CRC32 of that.  Then take the 3 lowest bytes of that CRC32 (big endian order) to use for the hash.
+* Data chunk: octets of data until the end of the barcode.  Or, if filling out the final page with data, this can be padding which is included in parity calculations and to make barcode fitting on a page consistent across all pages.
 
 
 ==================
