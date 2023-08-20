@@ -15,6 +15,8 @@ use base45::encode;
 // Experimentally determined to need to be around 40 to work around https://github.com/piderman314/bardecoder/issues/50
 const QUIET_ZONE_SIZE:u8 = 6;
 
+const MAX_QR_VERSION_TO_TRY:i16 = 20;
+
 #[derive(Copy, Clone)]
 pub enum BarcodeFormat {
     QR
@@ -76,7 +78,8 @@ impl<'a> PageBarcodePacker {
             damage_likelihood_map: make_constant_damage_map(0.5),
             cache_bytes_per_page: 0
         };
-        out.ensure_barcodes_are_packed();
+        (out.cache_barcodes, out.cache_bytes_per_page) = out.pack_barcodes(MAX_QR_VERSION_TO_TRY);
+        out.packing_cached = true;
         out
     }
 
@@ -118,25 +121,28 @@ impl<'a> PageBarcodePacker {
             cache_barcodes: self.cache_barcodes,
             cache_bytes_per_page: self.cache_bytes_per_page
         };
-        out.ensure_barcodes_are_packed();
+        if !out.packing_cached {
+            (out.cache_barcodes, out.cache_bytes_per_page) = out.pack_barcodes(MAX_QR_VERSION_TO_TRY);
+            out.packing_cached = true;
+        }
         out
     }
 
-    fn ensure_barcodes_are_packed(&mut self) {
-        if self.packing_cached {
-            return;
-        }
+    fn pack_barcodes(&mut self, qr_version: i16) -> (Vec<MultiplexedBarcodeInfo>, u32) {
         // Figure out the barcode packing
         // For now, we're going to use the super-naiive method of packing full-sized barcodes and figuring out how much each can hold.
         // TODO: Figure out better packing of barcodes.
         // TODO: Randomize the order of the barcodes on the page.
-        let mut next_x: u32 = 0;
-        let mut next_y: u32 = 0;
-        let v = 20; // Size ("version") of QR code - version 40 does not seem to be recognized well
+        let v = qr_version; // Size ("version") of QR code - version 40 does not seem to be recognized well
         let qrv = Version::Normal(v);
         let barcode_size: u32 = qrv.width() as u32;
-        self.cache_barcodes.clear();
-        self.cache_bytes_per_page = 0;
+        let mut cache_barcodes: Vec<MultiplexedBarcodeInfo> = vec![];
+        let mut cache_bytes_per_page: u32 = 0;
+        // This is a very quick approximation of where the barcodes should be.
+        let centering_offset_left = (self.width % (barcode_size + QUIET_ZONE_SIZE as u32) + QUIET_ZONE_SIZE as u32) / 2;
+        let centering_offset_top = (self.height % (barcode_size + QUIET_ZONE_SIZE as u32) + QUIET_ZONE_SIZE as u32) / 2;
+        let mut next_x: u32 = centering_offset_left;
+        let mut next_y: u32 = centering_offset_top;
         while next_y < self.height {
             let dl = (self.damage_likelihood_map)((next_x + barcode_size / 2) as f32 / self.width as f32, (next_y + barcode_size / 2) as f32 / self.height as f32);
             let ec = 
@@ -182,20 +188,20 @@ impl<'a> PageBarcodePacker {
                 //mode: Mode::Alphanumeric,
                 capacity_per_color_plane: data_capacity
             };
-            self.cache_barcodes.push(new_code);
+            cache_barcodes.push(new_code);
 
             // Total capacity calculation needs to include the different color planes.
-            self.cache_bytes_per_page += data_capacity * (self.color_multiplexer.num_planes() as u32);
+            cache_bytes_per_page += data_capacity * (self.color_multiplexer.num_planes() as u32);
 
             // Move to the next one.
             next_x += barcode_size + QUIET_ZONE_SIZE as u32;
             if next_x + barcode_size > self.width {
-                next_x = 0;
+                next_x = centering_offset_left;
                 next_y += barcode_size + QUIET_ZONE_SIZE as u32;
             }
         }
-        //println!("Packed {} barcodes onto page", self.cache_barcodes.len());
-        self.packing_cached = true;
+
+        (cache_barcodes, cache_bytes_per_page)
     }
 
     pub fn repack_barcodes_for_page_length(&mut self, min_needed_length: u32) -> bool {
