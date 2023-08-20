@@ -15,6 +15,7 @@ qrencode = "0.14.0"
 # bardecoder = { version = "0.2.2", path = "../bardecoder", features = [ ] }
 # bardecoder = { version = "0.2.2", path = "../bardecoder-0.2.2" }
 bardecoder = "0.5.0"
+# Tested reed-solomon in the hopes we could do correction as well, but was not able to get it to work reliably.
 reed-solomon-erasure = "6.0.0"
 clap = "2.33.0"
 image = "0.24.6"

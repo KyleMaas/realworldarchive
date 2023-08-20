@@ -13,7 +13,7 @@ use base45::encode;
 
 // Quiet zone size between QR codes, in pixels.  Default is a little more than the required 4, but not 10 like some folks recommend.  If this is unreliable, we might need to change it.
 // Experimentally determined to need to be around 40 to work around https://github.com/piderman314/bardecoder/issues/50
-const QUIET_ZONE_SIZE:u8 = 6;
+const QUIET_ZONE_SIZE:u8 = 8; //6;
 
 const MAX_QR_VERSION_TO_TRY:i16 = 20;
 

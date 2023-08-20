@@ -18,8 +18,8 @@
             //"args": ["-e", "-D", "220", "-i", "stresstest.png", "-o", "test_out/encodedfile.png"],
             //"args": ["-d", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.png"],
 
-            "args": ["-e", "-D", "36", "-c", "2", "-p", "2", "-i", "Design outline.txt", "-o", "test_out/encodedfile.png"],
-            //"args": ["-d", "-c", "2", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.txt"],
+            //"args": ["-e", "-D", "36", "-c", "2", "-p", "2", "-i", "Design outline.txt", "-o", "test_out/encodedfile.png"],
+            "args": ["-d", "-c", "2", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.txt"],
 
             //"stopAtEntry": false,
             "cwd": "${workspaceFolder}",
