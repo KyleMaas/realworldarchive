@@ -17,6 +17,9 @@ const QUIET_ZONE_SIZE:u8 = 6;
 
 const MAX_QR_VERSION_TO_TRY:i16 = 20;
 
+// This doesn't really matter that much - we're not going for cryptographic security here, just for jumbling for damage resistance.
+const PRNG_PRIME:u64 = 2147483647;
+
 #[derive(Copy, Clone)]
 pub enum BarcodeFormat {
     QR
@@ -41,6 +44,7 @@ pub fn make_radial_damage_map(min: f32, max: f32) -> DamageLikelihoodMap {
 }
 
 // Each instance of this represents as many barcodes multiplexed into a color version as the multiplexer can handle - this is not just one "barcode", per se
+#[derive(Copy, Clone)]
 struct MultiplexedBarcodeInfo {
     x: u32,
     y: u32,
@@ -248,6 +252,19 @@ impl<'a> PageBarcodePacker {
         return true;
     }
 
+    fn randomize_barcodes(&self, random_seed: u32) -> Vec<MultiplexedBarcodeInfo> {
+        // Take the incoming barcodes and put them in pseudorandom order in the output.
+        let mut existing_barcodes = self.cache_barcodes.clone();
+        let mut reordered_barcodes = vec![];
+        while existing_barcodes.len() > 0 {
+            // Pull one element and add it to the end of the new list.
+            let move_index = ((random_seed as u64).wrapping_mul(PRNG_PRIME) % (existing_barcodes.len() as u64)) as usize;
+            reordered_barcodes.push(existing_barcodes.remove(move_index));
+        }
+
+        return reordered_barcodes;
+    }
+
     pub fn data_bytes_per_page(&self) -> u32 {
         self.cache_bytes_per_page
     }
@@ -269,7 +286,8 @@ impl<'a> PageBarcodePacker {
 
     pub fn encode(&self, out_image: &mut RgbImage, page_number: u16, is_parity_page: bool, parity_index: u8, file_checksum: u32, page_start_offset: u64, total_length: u64, data: &[u8]) {
         // Pulling this out into its own reference so we can pseudorandomize this later.
-        let barcodes: &Vec<MultiplexedBarcodeInfo> = &self.cache_barcodes;
+        let random_seed = file_checksum.wrapping_add(page_number as u32);
+        let barcodes: &Vec<MultiplexedBarcodeInfo> = &self.randomize_barcodes(random_seed);
 
         // Fill the background with white so we don't have to do a quiet zone for each barcode individually.
         draw_filled_rect_mut(out_image, Rect::at(0, 0).of_size(out_image.width(), out_image.height()), Rgb([255, 255, 255]));
