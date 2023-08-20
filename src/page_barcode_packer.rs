@@ -206,18 +206,46 @@ impl<'a> PageBarcodePacker {
 
     pub fn repack_barcodes_for_page_length(&mut self, min_needed_length: u32) -> bool {
         // TODO: Implement this function such that we can try to expand the size of barcodes by integer multiples of the pixel size so we can use larger, lower-DPI barcodes for better readability.
-        // Return code indicates if we were able to successfully fit the required quantity of data onto the page at a different resolution.
-        if min_needed_length > self.cache_bytes_per_page {
-            panic!("We can only try to shrink the capacity of pages, not grow them.")
+
+        // So, what we're going to try to do is go from the maximum barcode size and go with smaller barcodes looking for a combination of:
+        // 1. Ideally, the largest barcodes we can get so have better error correction within the barcode itself
+        // 2. Highest data rate per page
+        // 3. At least as high of a data rate as given
+        let mut best_bytes_per_page = 0;
+        let mut best_barcodes: Vec<MultiplexedBarcodeInfo> = vec![];
+        let mut version_to_try = MAX_QR_VERSION_TO_TRY;
+        while version_to_try > MAX_QR_VERSION_TO_TRY / 2 {
+            let (candidate_barcodes, candidate_bytes) = self.pack_barcodes(version_to_try);
+
+            // Don't bother checking if this is the first candidate we're trying.
+            let mut use_this_one = false;
+            if version_to_try == MAX_QR_VERSION_TO_TRY {
+                use_this_one = true;
+            }
+            else {
+                // See if this one is at least 10% better to make up for the worse error correction of the smaller barcodes.
+                let bytes_to_beat = ((best_bytes_per_page as f32) * 1.1) as u32;
+                if candidate_bytes >= min_needed_length && candidate_bytes > bytes_to_beat {
+                    use_this_one = true;
+                }
+            }
+            if use_this_one {
+                best_bytes_per_page = candidate_bytes;
+                best_barcodes = candidate_barcodes;
+            }
+            version_to_try -= 1;
         }
-        else if min_needed_length == self.cache_bytes_per_page {
-            // We're already optimized - no sense in trying anything less.
-            // Let the caller know that we've expanded the barcodes to the largest size we can.
+
+        if best_bytes_per_page <= self.cache_bytes_per_page {
+            // We're already optimized.
             return false;
         }
-        // TODO: Actual implementation here.
-        // Always returning false here until we can actually implement the optimization system.
-        return false;
+
+        self.cache_barcodes = best_barcodes;
+        self.cache_bytes_per_page = best_bytes_per_page;
+        self.packing_cached = true;
+
+        return true;
     }
 
     pub fn data_bytes_per_page(&self) -> u32 {
