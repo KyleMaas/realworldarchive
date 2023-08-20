@@ -54,8 +54,8 @@ OPTIONS:
                                      format. [default: png]  [possible values: png]
     -m, --margins <margins>          Margins, specified as a space-separated list of top, right, bottom, left.  Defaults
                                      to "0.25 0.25 0.5 0.25" [default: 0.25 0.25 0.5 0.25]
-    -h, --height <pageheight>        Page height, in real world units.  Defaults to "11" [default: 11]
-    -w, --width <pagewidth>          Page width, in real world units.  Defaults to "8.5" [default: 8.5]
+    -H, --height <pageheight>        Page height, in real world units.  Defaults to "11" [default: 11]
+    -W, --width <pagewidth>          Page width, in real world units.  Defaults to "8.5" [default: 8.5]
     -p, --parity <parity>            Number of pages of parity to generate.  This equates to the number of full pages
                                      which can be lost from the rest of the document.  Defaults to "0" [default: 0]
     -u, --units <units>              Unit system to use for measurements.  Defaults to "in" [default: in]  [possible
