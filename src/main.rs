@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0+ OR Zlib
 
 extern crate clap;
-use clap::{Arg, App};
+use clap::{Command, Arg, ArgAction};
 extern crate image;
 //extern crate rqrr;
 extern crate bardecoder;
@@ -28,170 +28,123 @@ use file_decoder::FileDecoder;
 use glob::glob;
 use reed_solomon_erasure::galois_8::ReedSolomon;
 
-fn validate_integer(v: String) -> Result<(), String> {
-    match v.parse::<u16>() {
-        Ok(_n) => return Ok(()),
-        Err(_) => return Err(String::from("Value given was not a positive integer."))
-    }
-}
-
-fn validate_percentage(v: String) -> Result<(), String> {
-    match v.parse::<u8>() {
-        Ok(n) => {
-            if n <= 100 {
-                return Ok(());
-            }
-            else {
-                return Err(String::from("Value given was not a percentage in the range [0..100]."));
-            }
-        },
-        Err(_) => return Err(String::from("Value given was not a percentage in the range [0..100]."))
-    }
-}
-
-fn validate_parity(v: String) -> Result<(), String> {
-    match v.parse::<u8>() {
-        Ok(n) => {
-            if n <= 63 {
-                return Ok(());
-            }
-            else {
-                return Err(String::from("Value given was not in the range [0..63]."));
-            }
-        },
-        Err(_) => return Err(String::from("Value given was not in the range [0..63]."))
-    }
-}
-
-fn validate_positive_float(v: String) -> Result<(), String> {
-    match v.parse::<f32>() {
-        Ok(n) => if n >= 0.0 { return Ok(()); } else { return Err(String::from("Value given was negative."))},
-        Err(_) => return Err(String::from("Value given was not numeric."))
-    }
-}
-
 fn main() {
     env_logger::init();
 
-    let matches = App::new("Real World Archive")
+    let matches = Command::new("Real World Archive")
                     .version("0.0.1")
                     .author("Kyle Maas <kylemaasdev@gmail.com>")
                     .about("Archives data to a format suitable for printing or engraving.")
-                    .arg(Arg::with_name("input")
-                        .short("i")
+                    .arg(Arg::new("input")
+                        .short('i')
                         .long("input")
                         .help("File or directory to read input from.  Required unless running a stress test in encode mode.")
-                        .takes_value(true)
-                        .required_unless_all(&["stresstest", "encode"])
+                        .required_unless_present_all(&["stresstest", "encode"])
                         .display_order(1))
-                    .arg(Arg::with_name("output")
-                        .short("o")
+                    .arg(Arg::new("output")
+                        .short('o')
                         .long("output")
                         .help("File or directory to place output in.  Required unless running a stress test in decode mode.")
-                        .takes_value(true)
-                        .required_unless_all(&["stresstest", "decode"])
+                        .required_unless_present_all(&["stresstest", "decode"])
                         .display_order(2))
-                    .arg(Arg::with_name("format")
-                        .short("f")
+                    .arg(Arg::new("format")
+                        .short('f')
                         .long("format")
                         .help("Output format to use.  Currently only \"png\" is supported, and is the default output format.")
-                        .takes_value(true)
-                        .possible_values(&["png"])
+                        .value_parser(["png"])
                         .default_value("png"))
-                    .arg(Arg::with_name("units")
-                        .short("u")
+                    .arg(Arg::new("units")
+                        .short('u')
                         .long("units")
                         .help("Unit system to use for measurements.  Defaults to \"in\"")
-                        .takes_value(true)
-                        .possible_values(&["in", "mm", "px"])
+                        .value_parser(["in", "mm", "px"])
                         .default_value("in"))
-                    .arg(Arg::with_name("pagewidth")
-                        .short("w")
+                    .arg(Arg::new("pagewidth")
+                        .short('W')
                         .long("width")
                         .help("Page width, in real world units.  Defaults to \"8.5\"")
-                        .takes_value(true)
-                        .validator(validate_positive_float)
+                        .value_parser(clap::value_parser!(f32))
                         .default_value("8.5"))
-                    .arg(Arg::with_name("pageheight")
-                        .short("h")
+                    .arg(Arg::new("pageheight")
+                        .short('H')
                         .long("height")
                         .help("Page height, in real world units.  Defaults to \"11\"")
-                        .takes_value(true)
-                        .validator(validate_positive_float)
+                        .value_parser(clap::value_parser!(f32))
                         .default_value("11"))
-                    .arg(Arg::with_name("margins")
-                        .short("m")
+                    .arg(Arg::new("margins")
+                        .short('m')
                         .long("margins")
                         .help("Margins, specified as a space-separated list of top, right, bottom, left.  Defaults to \"0.25 0.25 0.5 0.25\"")
-                        .takes_value(true)
                         .default_value("0.25 0.25 0.5 0.25"))
-                    .arg(Arg::with_name("dpi")
-                        .short("D")
+                    .arg(Arg::new("dpi")
+                        .short('D')
                         .long("dpi")
                         .help("Target DPI.  Defaults to \"300\"")
-                        .validator(validate_integer)
+                        .value_parser(clap::value_parser!(u16).range(1..4801))
                         .default_value("300"))
-                    .arg(Arg::with_name("colors")
-                        .short("c")
+                    .arg(Arg::new("colors")
+                        .short('c')
                         .long("colors")
                         .help("Maximum number of colors.  Defaults to \"2\" for monochrome")
-                        .validator(validate_integer)
+                        .value_parser(clap::value_parser!(u8).range(2..))
                         .default_value("2"))
-                    .arg(Arg::with_name("ecfunction")
+                    .arg(Arg::new("ecfunction")
                         .long("ecfunction")
                         .help("Error correction function for how much error correction to use for each barcode depending on its position on the page.  Defaults to \"radial\" to skew error correction so there is less in the center of the page and more toward the corners but can be set to \"constant\" for a constant level of error correction across the entire page")
-                        .takes_value(true)
-                        .possible_values(&["constant", "radial"])
+                        .value_parser(["constant", "radial"])
                         .default_value("radial"))
-                    .arg(Arg::with_name("ecmin")
+                    .arg(Arg::new("ecmin")
                         .long("ecmin")
                         .help("Minimum percentage of error correction - just the number [0..100].  Please note this is not the amount of a barcode which can be lost and recovered but a percentage of the range we can run on.  For example, QR codes have a \"0\" level of 7% error corraction and \"100\" level of 30% of data which can be recovered.  If the constant error correction function is used, this is the amount used over the whole page.  Defaults to \"25\"")
-                        .validator(validate_percentage)
+                        .value_parser(clap::value_parser!(u8).range(0..101))
                         .default_value("25"))
-                    .arg(Arg::with_name("ecmax")
+                    .arg(Arg::new("ecmax")
                         .long("ecmax")
                         .help("Maximum percentage of error correction - just the number [0..100].  Please note this is not the amount of a barcode which can be lost and recovered but a percentage of the range we can run on.  For example, QR codes have a \"0\" level of 7% error corraction and \"100\" level of 30% of data which can be recovered.  Only applicable in non-constant error correction functions.  Defaults to \"100\"")
-                        .validator(validate_percentage)
+                        .value_parser(clap::value_parser!(u8).range(0..101))
                         .default_value("100"))
-                    .arg(Arg::with_name("decode")
-                        .short("d")
+                    .arg(Arg::new("decode")
+                        .short('d')
                         .long("decode")
                         .help("Use this to decode the given filename.  Either encode or decode must be specified.")
-                        .required_unless("encode")
+                        .required_unless_present("encode")
                         .conflicts_with("encode")
+                        .action(ArgAction::SetTrue)
                         .display_order(1))
-                    .arg(Arg::with_name("encode")
-                        .short("e")
+                    .arg(Arg::new("encode")
+                        .short('e')
                         .long("encode")
                         .help("Encode to the given filename as output.  Either encode or decode must be specified.")
-                        .required_unless("decode")
+                        .required_unless_present("decode")
                         .conflicts_with("decode")
+                        .action(ArgAction::SetTrue)
                         .display_order(2))
-                    .arg(Arg::with_name("parity")
-                        .short("p")
+                    .arg(Arg::new("parity")
+                        .short('p')
                         .long("parity")
                         .help("Number of pages of parity to generate in the range [0..63].  This equates to the number of full pages which can be lost from the rest of the document.  Defaults to \"0\"")
-                        .validator(validate_parity)
+                        .value_parser(clap::value_parser!(u8).range(0..64))
                         .default_value("0"))
-                    .arg(Arg::with_name("stresstest")
-                        .short("t")
+                    .arg(Arg::new("stresstest")
+                        .short('t')
                         .long("stresstest")
+                        .action(ArgAction::SetTrue)
                         .help("Generate a stress test"))
                     .get_matches();
-    let width = matches.value_of("pagewidth").unwrap();
-    let height = matches.value_of("pageheight").unwrap();
-    let dpi = matches.value_of("dpi").unwrap();
-    let colors = matches.value_of("colors").unwrap();
     let format = OutputFormat::PNG; //matches.value_of("format").unwrap().to_lowercase();
-    if matches.is_present("encode") {
+    let colors = *matches.get_one::<u8>("colors").unwrap();
+    if matches.get_flag("encode") {
         // Encode.
-        let out_file = matches.value_of("output").unwrap();
-        if matches.is_present("stresstest") {
+        let width = *matches.get_one::<f32>("pagewidth").unwrap();
+        let height = *matches.get_one::<f32>("pageheight").unwrap();
+        let dpi = *matches.get_one::<u16>("dpi").unwrap();
+        let out_file = matches.get_one::<String>("output").unwrap().as_str();
+        if matches.get_flag("stresstest") {
             // Generate a stress test page.
             let header = "Stress Test - {{dpi}} DPI, {{total_overlay_colors}}x Color Packing";
             let writer = ArchiveHumanOutputFile::new(out_file, format)
-                .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
-                .dpi(dpi.parse::<u16>().unwrap())
+                .size(width, height)
+                .dpi(dpi)
                 .document_header(&header)
                 .document_footer("Scan to test limits of your printing and scanning process")
                 .total_pages(1)
@@ -202,18 +155,18 @@ fn main() {
         }
         else {
             // Encode normal data.
-            let in_file = matches.value_of("input").unwrap();
-            let out_file = matches.value_of("output").unwrap();
+            let in_file = matches.get_one::<String>("input").unwrap();
+            let out_file = matches.get_one::<String>("output").unwrap();
             let mut file_reader = DataFile::new(in_file, false).finalize();
-            let color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
-            let parity_pages = matches.value_of("parity").unwrap().parse::<u8>().unwrap();
-            let damage_function = matches.value_of("ecfunction").unwrap();
-            let ec_min = matches.value_of("ecmin").unwrap().parse::<u8>().unwrap() as f32 / 100.0;
-            let ec_max = matches.value_of("ecmax").unwrap().parse::<u8>().unwrap() as f32 / 100.0;
+            let color_multiplexer = ColorMultiplexer::new(colors).finalize();
+            let parity_pages = *matches.get_one::<u8>("parity").unwrap();
+            let damage_function = matches.get_one::<String>("ecfunction").unwrap().as_str();
+            let ec_min = *matches.get_one::<u8>("ecmin").unwrap() as f32 / 100.0;
+            let ec_max = *matches.get_one::<u8>("ecmax").unwrap() as f32 / 100.0;
             let header = in_file;
             let mut writer = ArchiveHumanOutputFile::new(out_file, format)
-                .size(width.parse::<f32>().unwrap(), height.parse::<f32>().unwrap())
-                .dpi(dpi.parse::<u16>().unwrap())
+                .size(width, height)
+                .dpi(dpi)
                 .document_header(&header)
                 .document_footer("Page {{page_num}}/{{total_pages}}")
                 .colors(color_multiplexer.get_rgb())
@@ -361,8 +314,8 @@ fn main() {
     }
     else {
         // Decode.
-        let in_file = matches.value_of("input").unwrap();
-        if matches.is_present("stresstest") {
+        let in_file: &String = matches.get_one("input").unwrap();
+        if matches.get_flag("stresstest") {
             // Decode a stress test page.
             let reader = ArchiveHumanInputFile::new(in_file, format)
                 .finalize();
@@ -372,9 +325,9 @@ fn main() {
         }
         else {
             // Decode normal data.
-            let out_file = matches.value_of("output").unwrap();
+            let out_file: &String = matches.get_one("output").unwrap();
             let mut file_writer = DataFile::new(out_file, true).finalize();
-            let mut color_multiplexer = ColorMultiplexer::new(colors.parse::<u8>().unwrap()).finalize();
+            let mut color_multiplexer = ColorMultiplexer::new(colors).finalize();
             let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
             let mut first_file = true;
             let mut chunk_info = vec![];
