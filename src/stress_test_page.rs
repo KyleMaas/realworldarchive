@@ -3,6 +3,7 @@
 use crate::archive_human_output_file::*;
 use crate::archive_human_input_file::*;
 use crate::grayscale_recognizer::recognize_grayscale_barcodes;
+use crate::color_multiplexer::ColorMultiplexer;
 extern crate image;
 use image::{RgbImage, Rgb};
 use image::imageops;
@@ -54,50 +55,9 @@ impl<'a> StressTestPage {
         bits.push_byte_data(byte_array).unwrap();
         bits.push_terminator(ec_level).unwrap();
         bits
-}
-
-    fn multiplex_barcodes_into_image(barcodes: Vec<RgbImage>, colors: &Vec<Rgb<u8>>) -> RgbImage {
-        let width = barcodes[0].dimensions().0;
-        let height = barcodes[0].dimensions().1;
-        let gray_code_to_decimal = [
-            0,
-            1,
-            3,
-            2,
-            6,
-            7,
-            5,
-            4,
-            12,
-            13,
-            15,
-            14,
-            10,
-            11,
-            9,
-            8
-        ];
-        let mut out_image = RgbImage::new(width, height);
-        for x in 0..width {
-            for y in 0..height {
-                let mut bits_pixel_value = 0;
-                for c in 0..barcodes.len() {
-                    let bit_pixel = barcodes[c].get_pixel(x, y);
-                    bits_pixel_value |= if bit_pixel[0] > 127 { 1 << c } else { 0 };
-                }
-
-                // Treat the bits as a Gray code and translate to color index equivalent.
-                // This way, if the hue recognizer is off by one, we only lose one bit instead of possibly several.
-                // We may also be able to use this to our advantage, in that the "111" value is not the background color, so we can indirectly determine how many distinct hues we have.
-                let decimal_output = gray_code_to_decimal[bits_pixel_value];
-
-                out_image.put_pixel(x, y, colors[decimal_output]);
-            }
-        }
-        out_image
     }
 
-    pub fn encode(&self, writer: &ArchiveHumanOutputFile) {
+    pub fn encode(&self, writer: &ArchiveHumanOutputFile, max_color_multiplexer: &ColorMultiplexer) {
         // Maximum DPI will be native resolution.  Each successive decrease in resolution will be by half, resulting in full pixels.
         let barcode_image_size = writer.get_barcode_image_size();
         let full_dpi = writer.get_dpi();
@@ -114,45 +74,36 @@ impl<'a> StressTestPage {
         //println!("Maximum height: {}", large_barcode_height);
         let largest_barcode_version = StressTestPage::largest_qrcode_version_for_width(large_barcode_height);
         println!("Largest barcode version: {}", largest_barcode_version);
+        let max_color_bits_to_test = max_color_multiplexer.num_planes();
         let ec_level = EcLevel::H;
-        for y in 0..4 {
-            // Fill up the size of QR we're generating.
-            let x = 0;
-            let color = "B&W";
-            let qrcode_version = Version::Normal(largest_barcode_version >> y);
-            let dpi = full_dpi >> y;
-            println!("Generating B&W barcode at {} DPI", dpi);
-            let message = format!("Test at {} DPI in color {} ===== ", dpi, color);
-            let bits = StressTestPage::generate_barcode_filling_bits(qrcode_version, ec_level, &message);
+        for num_colors_bits in 1..(max_color_bits_to_test + 1) {
+            let x = (barcode_image_size.0 / max_color_bits_to_test as u32) * (num_colors_bits - 1) as u32;
+            for y in 0..4 {
+                let num_colors = (2 as u8).pow(num_colors_bits as u32);
+                let multiplexer = ColorMultiplexer::new(num_colors);
 
-            // Generate the QR code.
-            let code = QrCode::with_bits(bits, ec_level).unwrap();
-            let code_image = code.render::<Rgb<u8>>().module_dimensions(1 << y, 1 << y).quiet_zone(false).build();
-            imageops::overlay(&mut out_image, &code_image, x, (((y * large_barcode_height) as u32) + quiet_zone) as i64);
-        }
-
-        // Now do one for color.
-        let colors = writer.get_colors();
-        let num_bits_colors = (colors.len() as f64).log(2.0) as u8;
-        println!("We can generate {} barcodes for {} colors", num_bits_colors, colors.len());
-        for y in 0..4 {
-            let x = barcode_image_size.0 / 2;
-            let color_barcodes:Vec<RgbImage> = (0..num_bits_colors).map(|c:u8| {
                 // Fill up the size of QR we're generating.
-                let color = format!("Color #{}", c);
-                let qrcode_version = Version::Normal(largest_barcode_version >> y);
-                let dpi = full_dpi >> y;
-                println!("Generating color #{} barcode at {} DPI", c, dpi);
-                // Stick some spaces on the front so we're not repeating the same starting data in the same positions across barcodes.
-                let message = format!("{}Test at {} DPI in color {} ===== ", (" ").repeat(c as usize), dpi, color);
-                let bits = StressTestPage::generate_barcode_filling_bits(qrcode_version, ec_level, &message);
+                let color_description = if num_colors_bits < 2 {
+                    String::from("B&W")
+                }
+                else {
+                    format!("{} Colors", num_colors)
+                };
+                let color_barcodes:Vec<RgbImage> = (0..num_colors_bits).map(|c:u8| {
+                    let qrcode_version = Version::Normal(largest_barcode_version >> y);
+                    let dpi = full_dpi >> y;
+                    println!("Generating {} barcode at {} DPI", color_description, dpi);
+                    let space_for_color = String::from("=").repeat(c as usize);
+                    let message = format!("{} Test at {} DPI in color {} ===== ", space_for_color, dpi, color_description);
+                    let bits = StressTestPage::generate_barcode_filling_bits(qrcode_version, ec_level, &message);
 
-                // Generate the QR code.
-                let code = QrCode::with_bits(bits, ec_level).unwrap();
-                code.render::<Rgb<u8>>().module_dimensions(1 << y, 1 << y).quiet_zone(false).build()
-            }).collect::<Vec<RgbImage>>();
-            let code_image = StressTestPage::multiplex_barcodes_into_image(color_barcodes, &colors);
-            imageops::overlay(&mut out_image, &code_image, x as i64, (((y * large_barcode_height) as u32) + quiet_zone) as i64);
+                    // Generate the QR code.
+                    let code = QrCode::with_bits(bits, ec_level).unwrap();
+                    code.render::<Rgb<u8>>().module_dimensions(1 << y, 1 << y).quiet_zone(false).build()
+                }).collect::<Vec<RgbImage>>();
+                let code_image = multiplexer.multiplex_planes(color_barcodes);
+                imageops::overlay(&mut out_image, &code_image, x as i64, (((y * large_barcode_height) as u32) + quiet_zone) as i64);
+            }
         }
 
         // Feed it to the writer.

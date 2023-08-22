@@ -139,6 +139,7 @@ fn main() {
         let height = *matches.get_one::<f32>("pageheight").unwrap();
         let dpi = *matches.get_one::<u16>("dpi").unwrap();
         let out_file = matches.get_one::<String>("output").unwrap().as_str();
+        let color_multiplexer = ColorMultiplexer::new(colors).finalize();
         if matches.get_flag("stresstest") {
             // Generate a stress test page.
             let header = "Stress Test - {{dpi}} DPI, {{total_overlay_colors}}x Color Packing";
@@ -146,19 +147,19 @@ fn main() {
                 .size(width, height)
                 .dpi(dpi)
                 .document_header(&header)
-                .document_footer("Scan to test limits of your printing and scanning process")
+                .document_footer("Scan to test limits of printing/scanning")
                 .total_pages(1)
+                .colors(color_multiplexer.get_rgb())
                 .finalize();
             let stress_test = StressTestPage::new()
                 .finalize();
-            stress_test.encode(&writer);
+            stress_test.encode(&writer, &color_multiplexer);
         }
         else {
             // Encode normal data.
             let in_file = matches.get_one::<String>("input").unwrap();
             let out_file = matches.get_one::<String>("output").unwrap();
             let mut file_reader = DataFile::new(in_file, false).finalize();
-            let color_multiplexer = ColorMultiplexer::new(colors).finalize();
             let parity_pages = *matches.get_one::<u8>("parity").unwrap();
             let damage_function = matches.get_one::<String>("ecfunction").unwrap().as_str();
             let ec_min = *matches.get_one::<u8>("ecmin").unwrap() as f32 / 100.0;
