@@ -32,3 +32,5 @@ glob = "0.3.1"
 base45 = "3.1.0"
 kmeans_colors = "0.6.0"
 palette = "0.7.2"
+# This is so we can parse the stress test text.
+regex = "1.9.3"

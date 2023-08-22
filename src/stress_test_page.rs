@@ -5,6 +5,7 @@ use crate::archive_human_input_file::*;
 use crate::grayscale_recognizer::recognize_grayscale_barcodes;
 use crate::color_multiplexer::ColorMultiplexer;
 extern crate image;
+extern crate regex;
 use image::{RgbImage, Rgb};
 use image::imageops;
 use imageproc::rect::Rect;
@@ -12,7 +13,7 @@ use imageproc::drawing::*;
 use qrencode::QrCode;
 use qrencode::bits::Bits;
 use qrencode::types::{Version, EcLevel, Mode};
-
+use regex::Regex;
 pub struct StressTestPage {
 }
 
@@ -78,23 +79,17 @@ impl<'a> StressTestPage {
         let ec_level = EcLevel::H;
         for num_colors_bits in 1..(max_color_bits_to_test + 1) {
             let x = (barcode_image_size.0 / max_color_bits_to_test as u32) * (num_colors_bits - 1) as u32;
+            let num_colors = (2 as u8).pow(num_colors_bits as u32);
+            let multiplexer = ColorMultiplexer::new(num_colors);
             for y in 0..4 {
-                let num_colors = (2 as u8).pow(num_colors_bits as u32);
-                let multiplexer = ColorMultiplexer::new(num_colors);
-
                 // Fill up the size of QR we're generating.
-                let color_description = if num_colors_bits < 2 {
-                    String::from("B&W")
-                }
-                else {
-                    format!("{} Colors", num_colors)
-                };
                 let color_barcodes:Vec<RgbImage> = (0..num_colors_bits).map(|c:u8| {
                     let qrcode_version = Version::Normal(largest_barcode_version >> y);
                     let dpi = full_dpi >> y;
-                    println!("Generating {} barcode at {} DPI", color_description, dpi);
-                    let space_for_color = String::from("=").repeat(c as usize);
-                    let message = format!("{} Test at {} DPI in color {} ===== ", space_for_color, dpi, color_description);
+                    let color_description_long = format!("{} Colors, color #{}", num_colors, (c + 1));
+                    println!("Generating {} barcode at {} DPI", color_description_long, dpi);
+                    let space_for_color = String::from("=").repeat((c + 1) as usize);
+                    let message = format!("{} Test at {} DPI in {} =====", space_for_color, dpi, color_description_long);
                     let bits = StressTestPage::generate_barcode_filling_bits(qrcode_version, ec_level, &message);
 
                     // Generate the QR code.
@@ -110,15 +105,122 @@ impl<'a> StressTestPage {
         writer.write_page(&out_image, 0);
     }
 
-    pub fn decode(&self, reader: &ArchiveHumanInputFile) {
+    pub fn decode(&self, reader: &ArchiveHumanInputFile, max_color_multiplexer: &ColorMultiplexer) {
         println!("Reading image");
         let image = reader.read_page().unwrap();
 
-        // For now, convert to B&W.
-        let bw = image; //.into_luma();
-        let barcodes = recognize_grayscale_barcodes(&bw);
-        for b in barcodes {
-            println!("{}", String::from_utf8(b).unwrap());
+        // For each bitplane depth, demultiplex and try decoding.
+        let re = Regex::new(r"= Test at ([0-9]+) DPI in ([0-9]+) Colors, color #([0-9]+)").unwrap();
+        let max_color_bits_to_test = max_color_multiplexer.num_planes();
+        for num_colors_bits in (1..(max_color_bits_to_test + 1)).rev() {
+            let mut located_all = true;
+            let num_colors = (2 as u8).pow(num_colors_bits as u32);
+            println!("Attempting to decode at {} colors...", num_colors);
+            let multiplexer = ColorMultiplexer::new(num_colors);
+            //println!("- Detecting colors...");
+            //multiplexer.palettize_from_image(&image);
+            println!("- Demultiplexing...");
+            let bit_planes = multiplexer.demultiplex_image(&image);
+            let mut found_barcodes = vec![];
+            let mut dpis_found = vec![];
+            let mut colors_found = vec![];
+            for p in bit_planes {
+                println!("- Finding barcodes in bit plane...");
+                let barcodes = recognize_grayscale_barcodes(&p);
+                for b in barcodes {
+                    // Attempt to parse this barcode.
+                    let hay = String::from_utf8(b).unwrap();
+                    //println!("Decoded barcode as {}", hay);
+                    match re.captures(hay.as_str()) {
+                        Some(cap) => {
+                            // We've got a match, which means we have information on what we were able to read.
+                            let dpi = cap.get(1).unwrap().as_str().parse::<u16>().unwrap();
+                            let colors = cap.get(2).unwrap().as_str().parse::<u16>().unwrap();
+                            let color_num = cap.get(3).unwrap().as_str().parse::<u16>().unwrap();
+                            found_barcodes.push((dpi, colors, color_num));
+                            dpis_found.push(dpi);
+                            colors_found.push(colors);
+                        },
+                        None => { }
+                    }
+                }
+            }
+
+            // Check to see if the maximum we found was fully parsed.
+            dpis_found.sort();
+            dpis_found.dedup();
+            colors_found.sort();
+            colors_found.dedup();
+            if dpis_found.len() > 0 && colors_found.len() > 0 {
+                println!("- Highest DPI found: {}", dpis_found[dpis_found.len() - 1]);
+                println!("- Highest colors found: {}", colors_found[colors_found.len() - 1]);
+
+                // Print the header.
+                println!();
+                println!("Found at this level:");
+                print!("     ");
+                for c in colors_found.clone() {
+                    print!("{}", format!("{:^5}", c));
+                }
+                println!();
+
+                // Print each row
+                for d in dpis_found {
+                    print!("{}", format!("{:<5}", d));
+                    for c in colors_found.clone() {
+                        // Check if we have barcodes for each bit plane.
+                        let mut found_all_colors = true;
+                        let mut found_some_colors = false;
+                        let num_planes = u16::ilog2(c);
+                        //println!("Number of colors to search for barcodes {}", num_colors);
+                        for e in 1..(num_planes + 1) as u16 {
+                            let mut found_color = false;
+                            let barcodes_to_search = found_barcodes.clone();
+                            for (dpi, colors, color_num) in barcodes_to_search {
+                                if dpi == d && colors == c && color_num == e {
+                                    found_color = true;
+                                    //println!("Found barcode for {}, {}, {}", dpi, colors, color_num);
+                                    break;
+                                }
+                            }
+                            if found_color {
+                                found_some_colors = true;
+                            }
+                            else {
+                                //println!("Didn't find colors for {}, {}, {}", d, c, e);
+                                found_all_colors = false;
+                            }
+                        }
+                        if found_all_colors {
+                            print!("  *  ");
+                        }
+                        else if found_some_colors {
+                            located_all = false;
+                            print!("  ?  ");
+                        }
+                        else {
+                            located_all = false;
+                            print!("     ");
+                        }
+                    }
+                    println!();
+                }
+            }
+            else {
+                println!("- Did not find any usable barcodes at this color depth");
+            }
+            if located_all {
+                println!();
+                println!("Success!  All levels successfully found!  Stopping search.");
+                break;
+            }
+            else {
+                println!();
+                println!("Did not find complete combinations of DPI and colors.  Trying again at lower color depth...");
+                println!();
+                println!("=====");
+                println!();
+            }
         }
     }
 }

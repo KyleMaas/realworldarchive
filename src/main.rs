@@ -316,19 +316,19 @@ fn main() {
     else {
         // Decode.
         let in_file: &String = matches.get_one("input").unwrap();
+        let mut color_multiplexer = ColorMultiplexer::new(colors).finalize();
         if matches.get_flag("stresstest") {
             // Decode a stress test page.
             let reader = ArchiveHumanInputFile::new(in_file, format)
                 .finalize();
             let stress_test = StressTestPage::new()
                 .finalize();
-            stress_test.decode(&reader);
+            stress_test.decode(&reader, &color_multiplexer);
         }
         else {
             // Decode normal data.
             let out_file: &String = matches.get_one("output").unwrap();
             let mut file_writer = DataFile::new(out_file, true).finalize();
-            let mut color_multiplexer = ColorMultiplexer::new(colors).finalize();
             let in_files_glob = glob(in_file).expect("Failed to read glob pattern");
             let mut first_file = true;
             let mut chunk_info = vec![];

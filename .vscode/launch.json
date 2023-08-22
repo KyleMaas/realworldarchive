@@ -15,8 +15,9 @@
             //"args": ["-e", "-D", "80", "-c", "8", "-i", "seshat-regular.zip", "-o", "test_out/encodedfile.png"],
             //"args": ["-e", "-D", "72", "-c", "8", "-i", "stresstest.png", "-o", "test_out/encodedfile.png"],
 
-            "args": ["-e", "-D", "300", "-c", "64", "-t", "-o", "test_out/stresstest.png"],
-            //"args": ["-d", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.png"],
+            // Stress test
+            //"args": ["-e", "-D", "300", "-c", "64", "-t", "-o", "test_out/stresstest.png"],
+            "args": ["-d", "-t", "-c", "64", "-i", "stresstest.png"],
 
             //"args": ["-e", "-D", "36", "-c", "2", "-p", "2", "-i", "Design outline.txt", "-o", "test_out/encodedfile.png"],
             //"args": ["-d", "-c", "2", "-i", "test_out/encodedfile.*.png", "-o", "test_out/reconstructed.txt"],

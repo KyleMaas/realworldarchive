@@ -135,9 +135,9 @@ impl<'a> ArchiveHumanOutputFile<'a> {
         self.dpi
     }
 
-    pub fn get_colors(&self) -> &Vec<Rgb<u8>> {
+    /*pub fn get_colors(&self) -> &Vec<Rgb<u8>> {
         &self.colors
-    }
+    }*/
 
     pub fn write_page(&self, code_image: &RgbImage, page_num: u16) {
         // Format the barcode image into the bounds on the page where it should be, and add metadata.
